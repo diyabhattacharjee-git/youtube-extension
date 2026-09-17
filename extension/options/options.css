@@ -1,0 +1,20 @@
+:root { --ink: #4a2c3a; --paper: #fbfaf6; --pink: #eab8b1; --sage: #8fa878; --muted: #8a7b7f; --danger: #b0525e; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: #3a2f33; font: 15px/1.45 system-ui, sans-serif; }
+main { max-width: 720px; margin: 0 auto; padding: 24px 16px 60px; }
+h1 { display: flex; align-items: center; gap: 10px; font: 700 42px 'Caveat', cursive; color: var(--ink); margin: 0 0 16px; }
+fieldset { border: 2px solid var(--ink); border-radius: 18px 12px 16px 12px; padding: 12px 18px 16px; margin: 0 0 18px; box-shadow: 3px 4px 0 var(--ink); background: #fff; }
+legend { padding: 0 8px; font: 22px 'Patrick Hand', cursive; background: var(--pink); border: 2px solid var(--ink); border-radius: 10px; }
+label { display: grid; gap: 4px; margin: 10px 0; font-size: 13px; color: var(--muted); }
+label.check { display: flex; gap: 8px; align-items: center; color: #3a2f33; font-size: 14px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 16px; }
+input[type='url'], input[type='text'], select { width: 100%; padding: 7px 10px; border: 1.5px solid var(--ink); border-radius: 10px 7px 9px 8px; font: 15px system-ui; background: var(--paper); }
+input[type='color'] { width: 60px; height: 34px; border: 1.5px solid var(--ink); border-radius: 8px; background: none; }
+input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--ink); }
+.row { display: flex; gap: 8px; }
+.btn { padding: 6px 14px; border: 2px solid var(--ink); border-radius: 14px 10px 14px 9px; background: var(--paper); box-shadow: 2px 3px 0 var(--ink); font: 16px 'Patrick Hand', cursive; cursor: pointer; }
+.hint { font-size: 13px; color: var(--muted); }
+.hint.ok { color: #4f6b3a; }
+.hint.bad { color: var(--danger); }
+code { background: #f3efe7; padding: 1px 5px; border-radius: 5px; }
+.saved { position: fixed; bottom: 20px; right: 20px; margin: 0; padding: 8px 16px; background: var(--sage); color: #fff; border: 2px solid var(--ink); border-radius: 12px; font: 18px 'Patrick Hand', cursive; }

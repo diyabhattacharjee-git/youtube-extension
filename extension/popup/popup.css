@@ -1,0 +1,23 @@
+:root { --ink: #4a2c3a; --paper: #fbfaf6; --pink: #eab8b1; --sage: #8fa878; --muted: #8a7b7f; --danger: #b0525e; }
+* { box-sizing: border-box; }
+body { width: 330px; margin: 0; padding: 12px 14px 14px; background: var(--paper); color: #3a2f33; font: 14px system-ui, sans-serif; display: grid; gap: 10px; }
+header { display: flex; align-items: center; gap: 8px; }
+h1 { margin: 0; font: 700 28px 'Caveat', cursive; color: var(--ink); flex: 1; }
+.status { width: 11px; height: 11px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 1.5px var(--ink); }
+.status.online { background: var(--sage); }
+.card { display: grid; grid-template-columns: 96px 1fr; gap: 10px; align-items: center; padding: 8px; border: 2px solid var(--ink); border-radius: 14px 10px 14px 9px; box-shadow: 2px 3px 0 var(--ink); }
+.card img { width: 96px; height: 54px; object-fit: cover; border-radius: 6px; }
+.card strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font: 16px 'Patrick Hand', cursive; line-height: 1.15; }
+.card small { color: var(--muted); }
+label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+select, input { width: 100%; padding: 6px 8px; border: 1.5px solid var(--ink); border-radius: 10px 7px 9px 8px; background: #fff; font: 15px 'Patrick Hand', system-ui; color: #3a2f33; text-transform: none; letter-spacing: 0; }
+.btn { padding: 7px 12px; border: 2px solid var(--ink); border-radius: 14px 10px 14px 9px; background: var(--paper); box-shadow: 2px 3px 0 var(--ink); font: 17px 'Patrick Hand', cursive; cursor: pointer; }
+.btn:hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 3px 4px 0 var(--ink); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.accent { background: var(--pink); font-size: 19px; }
+.or { text-align: center; color: var(--muted); font-size: 12px; }
+.row { display: flex; gap: 6px; }
+.links { justify-content: space-between; }
+.link { border: 0; background: none; color: var(--ink); cursor: pointer; font: 15px 'Patrick Hand', cursive; padding: 2px; }
+.link:hover { text-decoration: underline wavy var(--sage); }
+.hint { margin: 0; font-size: 12px; color: var(--muted); min-height: 1em; }

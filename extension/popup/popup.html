@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TubeMind</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=swap" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <img src="../icons/icon48.png" alt="" width="30" height="30" />
+      <h1>TubeMind</h1>
+      <i id="status" class="status" title="Checking backend…"></i>
+    </header>
+
+    <section id="video-card" class="card" hidden>
+      <img id="video-thumb" alt="" />
+      <div>
+        <strong id="video-title"></strong>
+        <small id="video-channel"></small>
+      </div>
+    </section>
+
+    <label>Summarize for
+      <select id="mode">
+        <option value="revision">⚡ Quick revision</option>
+        <option value="academic">🎓 Academic research</option>
+        <option value="deep">🔭 Deep exploration</option>
+      </select>
+    </label>
+    <label>Learning profile
+      <select id="profile">
+        <option value="visual">🖼 Visual</option>
+        <option value="balanced">⚖ Balanced</option>
+        <option value="text">📖 Text-heavy</option>
+      </select>
+    </label>
+
+    <button id="generate" class="btn accent" disabled>🧠 Generate mindmap</button>
+
+    <div class="or">or paste any YouTube link</div>
+    <div class="row">
+      <input id="url" type="url" placeholder="https://youtu.be/…" />
+      <button id="generate-url" class="btn">Go</button>
+    </div>
+
+    <div class="row links">
+      <button id="library" class="link">📚 Library</button>
+      <button id="join" class="link">👥 Join room</button>
+      <button id="demo" class="link">🧪 Demo</button>
+      <button id="options" class="link">⚙ Settings</button>
+    </div>
+    <p id="hint" class="hint"></p>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

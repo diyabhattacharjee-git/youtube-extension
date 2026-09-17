@@ -1,0 +1,14 @@
+# Optional "full power" extras. Everything degrades gracefully without them.
+-r requirements.txt
+# BERT sentence embeddings for semantic clustering / search / merging
+sentence-transformers>=2.7
+# Whisper speech-to-text fallback (CTranslate2 build of OpenAI Whisper)
+faster-whisper>=1.0
+# Audio / low-res video download for Whisper + slide extraction
+yt-dlp>=2024.8.6
+# Slide / chart keyframe extraction
+opencv-python-headless>=4.9
+# Better noun-phrase candidates: python -m spacy download en_core_web_sm
+spacy>=3.7
+# Local open-source LLM fallback (HF_LOCAL_MODEL)
+transformers>=4.44

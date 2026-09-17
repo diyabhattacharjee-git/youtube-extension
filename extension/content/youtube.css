@@ -1,0 +1,47 @@
+/* TubeMind button injected on youtube.com — hand-drawn marker look */
+#tubemind-generate {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px 0 10px;
+  margin-right: 8px;
+  border: 2px solid #4a2c3a;
+  border-radius: 18px 14px 18px 12px / 12px 18px 14px 18px;
+  background: #f4d3cf;
+  color: #3b2530;
+  font: 600 14px/1 'Roboto', 'Segoe UI', sans-serif;
+  cursor: pointer;
+  box-shadow: 2px 3px 0 #4a2c3a;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  white-space: nowrap;
+}
+#tubemind-generate:hover { transform: translate(-1px, -1px) rotate(-1deg); box-shadow: 3px 4px 0 #4a2c3a; }
+#tubemind-generate:active { transform: translate(1px, 2px); box-shadow: 0 0 0 #4a2c3a; }
+#tubemind-generate svg { width: 20px; height: 20px; }
+#tubemind-generate.tm-busy { pointer-events: none; opacity: 0.7; }
+#tubemind-generate.tm-busy svg { animation: tm-spin 1s linear infinite; }
+#tubemind-generate.tm-floating { position: fixed; right: 24px; bottom: 24px; z-index: 9999; }
+
+.tm-seek-flash {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-1.5deg);
+  z-index: 70;
+  padding: 6px 14px;
+  background: #fbfaf7;
+  color: #3b2530;
+  border: 2px solid #4a2c3a;
+  border-radius: 14px 10px 14px 10px;
+  font: 600 14px 'Roboto', sans-serif;
+  animation: tm-pop 1.8s ease forwards;
+  pointer-events: none;
+}
+
+@keyframes tm-spin { to { transform: rotate(360deg); } }
+@keyframes tm-pop {
+  0% { opacity: 0; transform: translateX(-50%) scale(0.8) rotate(-1.5deg); }
+  15%, 75% { opacity: 1; transform: translateX(-50%) scale(1) rotate(-1.5deg); }
+  100% { opacity: 0; }
+}

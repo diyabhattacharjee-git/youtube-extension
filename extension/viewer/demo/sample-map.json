@@ -1,0 +1,1286 @@
+{
+  "schema": "tubemind/1",
+  "id": "demo-neural-networks",
+  "version": 1,
+  "meta": {
+    "title": "Sample: How Neural Networks Learn (illustrative lecture)",
+    "videoId": null,
+    "channel": "TubeMind sample",
+    "duration": 1440,
+    "mode": "academic",
+    "profile": "balanced",
+    "language": "en",
+    "transcriptSource": "sample",
+    "llm": "hand-written sample",
+    "embeddings": "n/a",
+    "createdAt": 1789414872096,
+    "sample": true,
+    "note": "Illustrative data bundled with TubeMind. It is not linked to a real video, so ▶ timestamps show a notice instead of seeking."
+  },
+  "root": {
+    "id": "demo-root",
+    "text": "How Neural Networks Learn",
+    "type": "root",
+    "layer": 0,
+    "start": 0,
+    "end": 1440,
+    "summary": "From single neurons to gradient descent, backpropagation and the open debates about scale.",
+    "tone": [
+      "instructional",
+      "enthusiastic"
+    ],
+    "keywords": [
+      "neuron",
+      "loss",
+      "gradient descent",
+      "backpropagation",
+      "overfitting"
+    ],
+    "notes": "",
+    "links": [],
+    "image": null,
+    "collapsed": false,
+    "children": [
+      {
+        "id": "demo-s1",
+        "text": "Neurons & Layers",
+        "type": "section",
+        "layer": 1,
+        "start": 0,
+        "end": 300,
+        "summary": "Networks are stacks of simple units that weigh evidence and pass it on.",
+        "tone": [
+          "instructional"
+        ],
+        "keywords": [],
+        "notes": "Try it: click ▶ chips, press 1–4 to switch semantic layers, right-click for AI actions, or open 🎓 Study.",
+        "links": [
+          {
+            "title": "Neural network (Wikipedia)",
+            "url": "https://en.wikipedia.org/wiki/Neural_network_(machine_learning)"
+          }
+        ],
+        "image": null,
+        "collapsed": false,
+        "children": [
+          {
+            "id": "demo-s1-c1",
+            "text": "Artificial neuron: weighted sum of inputs passed through an activation",
+            "type": "concept",
+            "layer": 2,
+            "start": 42,
+            "end": null,
+            "summary": "Each neuron multiplies inputs by weights, adds a bias and squashes the result.",
+            "tone": [],
+            "keywords": [],
+            "notes": "",
+            "links": [],
+            "image": null,
+            "collapsed": false,
+            "children": [
+              {
+                "id": "demo-s1-c1-d1",
+                "text": "Weights scale how much each input matters",
+                "type": "detail",
+                "layer": 3,
+                "start": 70,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s1-c1-d2",
+                "text": "Bias shifts the activation threshold",
+                "type": "detail",
+                "layer": 3,
+                "start": 95,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s1-c1-t1",
+                "text": "“Think of a neuron as a tiny voting machine where every input gets a different number of votes.”",
+                "type": "transcript",
+                "layer": 4,
+                "start": 48,
+                "end": 56,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "demo-s1-c2",
+            "text": "Activation functions: add non-linearity (ReLU, sigmoid, tanh)",
+            "type": "concept",
+            "layer": 2,
+            "start": 140,
+            "end": null,
+            "summary": "Non-linear activations let networks model curved decision boundaries.",
+            "tone": [],
+            "keywords": [],
+            "notes": "",
+            "links": [],
+            "image": null,
+            "collapsed": false,
+            "children": [
+              {
+                "id": "demo-s1-c2-d1",
+                "text": "Without them, stacked layers collapse into one linear map",
+                "type": "detail",
+                "layer": 3,
+                "start": 175,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s1-c2-t1",
+                "text": "“If you remove the activation, ten layers are mathematically no better than one.”",
+                "type": "transcript",
+                "layer": 4,
+                "start": 146,
+                "end": 154,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "demo-s1-c3",
+            "text": "Layers: input → hidden → output",
+            "type": "concept",
+            "layer": 2,
+            "start": 220,
+            "end": null,
+            "summary": "Depth lets networks build features from simple edges to abstract ideas.",
+            "tone": [],
+            "keywords": [],
+            "notes": "",
+            "links": [],
+            "image": null,
+            "collapsed": false,
+            "children": [
+              {
+                "id": "demo-s1-c3-d1",
+                "text": "Early layers detect simple patterns, later layers combine them",
+                "type": "detail",
+                "layer": 3,
+                "start": 255,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s1-c3-t1",
+                "text": "“The first layer might see edges, the next sees shapes, and deeper layers see whole objects.”",
+                "type": "transcript",
+                "layer": 4,
+                "start": 226,
+                "end": 234,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              }
+            ]
+          }
+        ],
+        "color": 0
+      },
+      {
+        "id": "demo-s2",
+        "text": "Forward Pass & Loss",
+        "type": "section",
+        "layer": 1,
+        "start": 300,
+        "end": 480,
+        "summary": "A prediction is produced, then scored by a loss function.",
+        "tone": [
+          "analytical"
+        ],
+        "keywords": [],
+        "notes": "",
+        "links": [],
+        "image": null,
+        "collapsed": false,
+        "children": [
+          {
+            "id": "demo-s2-c1",
+            "text": "Forward pass: data flows layer by layer to a prediction",
+            "type": "concept",
+            "layer": 2,
+            "start": 320,
+            "end": null,
+            "summary": "Inputs are transformed by each layer until the output layer produces a guess.",
+            "tone": [],
+            "keywords": [],
+            "notes": "",
+            "links": [],
+            "image": null,
+            "collapsed": false,
+            "children": [
+              {
+                "id": "demo-s2-c1-d1",
+                "text": "Output layer size matches the number of classes",
+                "type": "detail",
+                "layer": 3,
+                "start": 350,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s2-c1-t1",
+                "text": "“The forward pass is just the network making its best guess with the weights it currently has.”",
+                "type": "transcript",
+                "layer": 4,
+                "start": 326,
+                "end": 334,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "demo-s2-c2",
+            "text": "Loss function: one number measuring how wrong the prediction is",
+            "type": "concept",
+            "layer": 2,
+            "start": 365,
+            "end": null,
+            "summary": "Training means making this number smaller on average.",
+            "tone": [],
+            "keywords": [],
+            "notes": "",
+            "links": [],
+            "image": null,
+            "collapsed": false,
+            "children": [
+              {
+                "id": "demo-s2-c2-d1",
+                "text": "Cross-entropy for classification",
+                "type": "detail",
+                "layer": 3,
+                "start": 400,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s2-c2-d2",
+                "text": "Mean squared error for regression",
+                "type": "detail",
+                "layer": 3,
+                "start": 425,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s2-c2-t1",
+                "text": "“Everything in training exists to push this single number down.”",
+                "type": "transcript",
+                "layer": 4,
+                "start": 371,
+                "end": 379,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              }
+            ]
+          }
+        ],
+        "color": 1
+      },
+      {
+        "id": "demo-s3",
+        "text": "Gradient Descent",
+        "type": "section",
+        "layer": 1,
+        "start": 480,
+        "end": 720,
+        "summary": "Weights move a small step downhill on the loss surface, over and over.",
+        "tone": [
+          "enthusiastic",
+          "instructional"
+        ],
+        "keywords": [],
+        "notes": "",
+        "links": [],
+        "image": null,
+        "collapsed": false,
+        "children": [
+          {
+            "id": "demo-s3-c1",
+            "text": "Gradient: direction of steepest increase of the loss",
+            "type": "concept",
+            "layer": 2,
+            "start": 510,
+            "end": null,
+            "summary": "Stepping against the gradient reduces the loss fastest locally.",
+            "tone": [],
+            "keywords": [],
+            "notes": "",
+            "links": [],
+            "image": null,
+            "collapsed": false,
+            "children": [
+              {
+                "id": "demo-s3-c1-d1",
+                "text": "Imagine walking downhill in fog, feeling the slope under your feet",
+                "type": "detail",
+                "layer": 3,
+                "start": 545,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s3-c1-t1",
+                "text": "“This is honestly one of the most beautiful ideas in all of machine learning!”",
+                "type": "transcript",
+                "layer": 4,
+                "start": 516,
+                "end": 524,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "demo-s3-c2",
+            "text": "Learning rate: step size for each weight update",
+            "type": "concept",
+            "layer": 2,
+            "start": 580,
+            "end": null,
+            "summary": "The single most important hyper-parameter to tune.",
+            "tone": [],
+            "keywords": [],
+            "notes": "",
+            "links": [],
+            "image": null,
+            "collapsed": false,
+            "children": [
+              {
+                "id": "demo-s3-c2-d1",
+                "text": "Too large overshoots the minimum",
+                "type": "detail",
+                "layer": 3,
+                "start": 605,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s3-c2-d2",
+                "text": "Too small crawls and wastes compute",
+                "type": "detail",
+                "layer": 3,
+                "start": 620,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s3-c2-t1",
+                "text": "“Be careful: a learning rate that is too high can make the loss explode.”",
+                "type": "transcript",
+                "layer": 4,
+                "start": 586,
+                "end": 594,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "demo-s3-c3",
+            "text": "Mini-batches: estimate the gradient on small samples",
+            "type": "concept",
+            "layer": 2,
+            "start": 660,
+            "end": null,
+            "summary": "Noisy but cheap gradient estimates that also help generalization.",
+            "tone": [],
+            "keywords": [],
+            "notes": "",
+            "links": [],
+            "image": null,
+            "collapsed": false,
+            "children": [
+              {
+                "id": "demo-s3-c3-d1",
+                "text": "One pass over the whole dataset is called an epoch",
+                "type": "detail",
+                "layer": 3,
+                "start": 690,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s3-c3-t1",
+                "text": "“Instead of looking at all million examples, we look at a batch of sixty-four.”",
+                "type": "transcript",
+                "layer": 4,
+                "start": 666,
+                "end": 674,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              }
+            ]
+          }
+        ],
+        "color": 2
+      },
+      {
+        "id": "demo-s4",
+        "text": "Backpropagation",
+        "type": "section",
+        "layer": 1,
+        "start": 720,
+        "end": 960,
+        "summary": "The chain rule tells every weight how it contributed to the error.",
+        "tone": [
+          "analytical"
+        ],
+        "keywords": [],
+        "notes": "",
+        "links": [],
+        "image": null,
+        "collapsed": false,
+        "children": [
+          {
+            "id": "demo-s4-c1",
+            "text": "Backpropagation: chain rule applied from output back to input",
+            "type": "concept",
+            "layer": 2,
+            "start": 745,
+            "end": null,
+            "summary": "Gradients are computed layer by layer, reusing intermediate results.",
+            "tone": [],
+            "keywords": [],
+            "notes": "",
+            "links": [],
+            "image": null,
+            "collapsed": false,
+            "children": [
+              {
+                "id": "demo-s4-c1-d1",
+                "text": "Automatic differentiation libraries do this for you",
+                "type": "detail",
+                "layer": 3,
+                "start": 800,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s4-c1-t1",
+                "text": "“Backprop is just the chain rule from calculus, applied very systematically.”",
+                "type": "transcript",
+                "layer": 4,
+                "start": 751,
+                "end": 759,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "demo-s4-c2",
+            "text": "Vanishing gradients: signals shrink through deep stacks",
+            "type": "concept",
+            "layer": 2,
+            "start": 850,
+            "end": null,
+            "summary": "Early layers barely learn when gradients get multiplied by small numbers.",
+            "tone": [],
+            "keywords": [],
+            "notes": "",
+            "links": [],
+            "image": null,
+            "collapsed": false,
+            "children": [
+              {
+                "id": "demo-s4-c2-d1",
+                "text": "ReLU activations help gradients flow",
+                "type": "detail",
+                "layer": 3,
+                "start": 890,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s4-c2-d2",
+                "text": "Residual connections add shortcuts for the signal",
+                "type": "detail",
+                "layer": 3,
+                "start": 905,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s4-c2-t1",
+                "text": "“This problem stalled deep learning for years, which is a real limitation of naive deep networks.”",
+                "type": "transcript",
+                "layer": 4,
+                "start": 856,
+                "end": 864,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              }
+            ]
+          }
+        ],
+        "color": 3
+      },
+      {
+        "id": "demo-s5",
+        "text": "Overfitting & Regularization",
+        "type": "section",
+        "layer": 1,
+        "start": 960,
+        "end": 1200,
+        "summary": "A model can memorize its training data instead of learning the pattern.",
+        "tone": [
+          "cautionary"
+        ],
+        "keywords": [],
+        "notes": "",
+        "links": [],
+        "image": null,
+        "collapsed": false,
+        "children": [
+          {
+            "id": "demo-s5-c1",
+            "text": "Overfitting: memorizing training data instead of generalizing",
+            "type": "concept",
+            "layer": 2,
+            "start": 980,
+            "end": null,
+            "summary": "Training loss keeps falling while validation loss rises.",
+            "tone": [],
+            "keywords": [],
+            "notes": "",
+            "links": [],
+            "image": null,
+            "collapsed": false,
+            "children": [
+              {
+                "id": "demo-s5-c1-d1",
+                "text": "More data is the most reliable cure",
+                "type": "detail",
+                "layer": 3,
+                "start": 1010,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s5-c1-t1",
+                "text": "“Watch out: a perfect score on training data is a warning sign, not a victory.”",
+                "type": "transcript",
+                "layer": 4,
+                "start": 986,
+                "end": 994,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "demo-s5-c2",
+            "text": "Dropout: randomly silence neurons during training",
+            "type": "concept",
+            "layer": 2,
+            "start": 1050,
+            "end": null,
+            "summary": "Forces the network to spread knowledge across many units.",
+            "tone": [],
+            "keywords": [],
+            "notes": "",
+            "links": [],
+            "image": null,
+            "collapsed": false,
+            "children": [
+              {
+                "id": "demo-s5-c2-d1",
+                "text": "Disabled at inference time",
+                "type": "detail",
+                "layer": 3,
+                "start": 1080,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s5-c2-t1",
+                "text": "“Dropout is like making a team practice with random members missing.”",
+                "type": "transcript",
+                "layer": 4,
+                "start": 1056,
+                "end": 1064,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "demo-s5-c3",
+            "text": "Validation set: an early warning for overfitting",
+            "type": "concept",
+            "layer": 2,
+            "start": 1120,
+            "end": null,
+            "summary": "Held-out data used to pick hyper-parameters and stop training early.",
+            "tone": [],
+            "keywords": [],
+            "notes": "",
+            "links": [],
+            "image": null,
+            "collapsed": false,
+            "children": [
+              {
+                "id": "demo-s5-c3-d1",
+                "text": "Never tune on the test set",
+                "type": "detail",
+                "layer": 3,
+                "start": 1150,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s5-c3-t1",
+                "text": "“The validation curve tells you when to stop.”",
+                "type": "transcript",
+                "layer": 4,
+                "start": 1126,
+                "end": 1134,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              }
+            ]
+          }
+        ],
+        "color": 4
+      },
+      {
+        "id": "demo-s6",
+        "text": "Is Bigger Always Better?",
+        "type": "section",
+        "layer": 1,
+        "start": 1200,
+        "end": 1440,
+        "summary": "Researchers still debate scale versus architecture and interpretability.",
+        "tone": [
+          "controversial"
+        ],
+        "keywords": [],
+        "notes": "",
+        "links": [],
+        "image": null,
+        "collapsed": false,
+        "children": [
+          {
+            "id": "demo-s6-c1",
+            "text": "Scaling debate: more data & parameters vs. smarter architectures",
+            "type": "concept",
+            "layer": 2,
+            "start": 1230,
+            "end": null,
+            "summary": "Bigger models keep improving, but at rising cost — critics argue for efficiency.",
+            "tone": [],
+            "keywords": [],
+            "notes": "",
+            "links": [],
+            "image": null,
+            "collapsed": false,
+            "children": [
+              {
+                "id": "demo-s6-c1-d1",
+                "text": "Compute and energy costs grow quickly",
+                "type": "detail",
+                "layer": 3,
+                "start": 1275,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s6-c1-t1",
+                "text": "“This is a genuinely controversial topic and people disagree strongly.”",
+                "type": "transcript",
+                "layer": 4,
+                "start": 1236,
+                "end": 1244,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              }
+            ]
+          },
+          {
+            "id": "demo-s6-c2",
+            "text": "Interpretability: why a network decides is still hard to explain",
+            "type": "concept",
+            "layer": 2,
+            "start": 1330,
+            "end": null,
+            "summary": "Tools like saliency maps offer partial, sometimes misleading explanations.",
+            "tone": [],
+            "keywords": [],
+            "notes": "",
+            "links": [],
+            "image": null,
+            "collapsed": false,
+            "children": [
+              {
+                "id": "demo-s6-c2-d1",
+                "text": "Important for medicine, finance and law",
+                "type": "detail",
+                "layer": 3,
+                "start": 1370,
+                "end": null,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              },
+              {
+                "id": "demo-s6-c2-t1",
+                "text": "“We can measure what the network does far better than we can explain why.”",
+                "type": "transcript",
+                "layer": 4,
+                "start": 1336,
+                "end": 1344,
+                "summary": "",
+                "tone": [],
+                "keywords": [],
+                "notes": "",
+                "links": [],
+                "image": null,
+                "collapsed": false,
+                "children": []
+              }
+            ]
+          }
+        ],
+        "color": 0
+      }
+    ]
+  },
+  "edges": [
+    {
+      "id": "demo-e1",
+      "source": "demo-s2-c2",
+      "target": "demo-s3-c1",
+      "label": "is minimized via",
+      "origin": "sample"
+    },
+    {
+      "id": "demo-e2",
+      "source": "demo-s4-c1",
+      "target": "demo-s3-c1",
+      "label": "computes",
+      "origin": "sample"
+    },
+    {
+      "id": "demo-e3",
+      "source": "demo-s1-c2",
+      "target": "demo-s4-c2",
+      "label": "can cause",
+      "origin": "sample"
+    },
+    {
+      "id": "demo-e4",
+      "source": "demo-s5-c1",
+      "target": "demo-s6-c1",
+      "label": "motivates",
+      "origin": "sample"
+    }
+  ],
+  "segments": [
+    {
+      "id": "demo-s1",
+      "start": 0,
+      "end": 300,
+      "title": "Neurons & Layers"
+    },
+    {
+      "id": "demo-s2",
+      "start": 300,
+      "end": 480,
+      "title": "Forward Pass & Loss"
+    },
+    {
+      "id": "demo-s3",
+      "start": 480,
+      "end": 720,
+      "title": "Gradient Descent"
+    },
+    {
+      "id": "demo-s4",
+      "start": 720,
+      "end": 960,
+      "title": "Backpropagation"
+    },
+    {
+      "id": "demo-s5",
+      "start": 960,
+      "end": 1200,
+      "title": "Overfitting & Regularization"
+    },
+    {
+      "id": "demo-s6",
+      "start": 1200,
+      "end": 1440,
+      "title": "Is Bigger Always Better?"
+    }
+  ],
+  "transcript": [
+    {
+      "start": 42,
+      "end": 48,
+      "text": "Each neuron multiplies inputs by weights, adds a bias and squashes the result."
+    },
+    {
+      "start": 48,
+      "end": 56,
+      "text": "Think of a neuron as a tiny voting machine where every input gets a different number of votes."
+    },
+    {
+      "start": 70,
+      "end": 78,
+      "text": "Weights scale how much each input matters."
+    },
+    {
+      "start": 95,
+      "end": 103,
+      "text": "Bias shifts the activation threshold."
+    },
+    {
+      "start": 140,
+      "end": 146,
+      "text": "Non-linear activations let networks model curved decision boundaries."
+    },
+    {
+      "start": 146,
+      "end": 154,
+      "text": "If you remove the activation, ten layers are mathematically no better than one."
+    },
+    {
+      "start": 175,
+      "end": 183,
+      "text": "Without them, stacked layers collapse into one linear map."
+    },
+    {
+      "start": 220,
+      "end": 226,
+      "text": "Depth lets networks build features from simple edges to abstract ideas."
+    },
+    {
+      "start": 226,
+      "end": 234,
+      "text": "The first layer might see edges, the next sees shapes, and deeper layers see whole objects."
+    },
+    {
+      "start": 255,
+      "end": 263,
+      "text": "Early layers detect simple patterns, later layers combine them."
+    },
+    {
+      "start": 320,
+      "end": 326,
+      "text": "Inputs are transformed by each layer until the output layer produces a guess."
+    },
+    {
+      "start": 326,
+      "end": 334,
+      "text": "The forward pass is just the network making its best guess with the weights it currently has."
+    },
+    {
+      "start": 350,
+      "end": 358,
+      "text": "Output layer size matches the number of classes."
+    },
+    {
+      "start": 365,
+      "end": 371,
+      "text": "Training means making this number smaller on average."
+    },
+    {
+      "start": 371,
+      "end": 379,
+      "text": "Everything in training exists to push this single number down."
+    },
+    {
+      "start": 400,
+      "end": 408,
+      "text": "Cross-entropy for classification."
+    },
+    {
+      "start": 425,
+      "end": 433,
+      "text": "Mean squared error for regression."
+    },
+    {
+      "start": 510,
+      "end": 516,
+      "text": "Stepping against the gradient reduces the loss fastest locally."
+    },
+    {
+      "start": 516,
+      "end": 524,
+      "text": "This is honestly one of the most beautiful ideas in all of machine learning!"
+    },
+    {
+      "start": 545,
+      "end": 553,
+      "text": "Imagine walking downhill in fog, feeling the slope under your feet."
+    },
+    {
+      "start": 580,
+      "end": 586,
+      "text": "The single most important hyper-parameter to tune."
+    },
+    {
+      "start": 586,
+      "end": 594,
+      "text": "Be careful: a learning rate that is too high can make the loss explode."
+    },
+    {
+      "start": 605,
+      "end": 613,
+      "text": "Too large overshoots the minimum."
+    },
+    {
+      "start": 620,
+      "end": 628,
+      "text": "Too small crawls and wastes compute."
+    },
+    {
+      "start": 660,
+      "end": 666,
+      "text": "Noisy but cheap gradient estimates that also help generalization."
+    },
+    {
+      "start": 666,
+      "end": 674,
+      "text": "Instead of looking at all million examples, we look at a batch of sixty-four."
+    },
+    {
+      "start": 690,
+      "end": 698,
+      "text": "One pass over the whole dataset is called an epoch."
+    },
+    {
+      "start": 745,
+      "end": 751,
+      "text": "Gradients are computed layer by layer, reusing intermediate results."
+    },
+    {
+      "start": 751,
+      "end": 759,
+      "text": "Backprop is just the chain rule from calculus, applied very systematically."
+    },
+    {
+      "start": 800,
+      "end": 808,
+      "text": "Automatic differentiation libraries do this for you."
+    },
+    {
+      "start": 850,
+      "end": 856,
+      "text": "Early layers barely learn when gradients get multiplied by small numbers."
+    },
+    {
+      "start": 856,
+      "end": 864,
+      "text": "This problem stalled deep learning for years, which is a real limitation of naive deep networks."
+    },
+    {
+      "start": 890,
+      "end": 898,
+      "text": "ReLU activations help gradients flow."
+    },
+    {
+      "start": 905,
+      "end": 913,
+      "text": "Residual connections add shortcuts for the signal."
+    },
+    {
+      "start": 980,
+      "end": 986,
+      "text": "Training loss keeps falling while validation loss rises."
+    },
+    {
+      "start": 986,
+      "end": 994,
+      "text": "Watch out: a perfect score on training data is a warning sign, not a victory."
+    },
+    {
+      "start": 1010,
+      "end": 1018,
+      "text": "More data is the most reliable cure."
+    },
+    {
+      "start": 1050,
+      "end": 1056,
+      "text": "Forces the network to spread knowledge across many units."
+    },
+    {
+      "start": 1056,
+      "end": 1064,
+      "text": "Dropout is like making a team practice with random members missing."
+    },
+    {
+      "start": 1080,
+      "end": 1088,
+      "text": "Disabled at inference time."
+    },
+    {
+      "start": 1120,
+      "end": 1126,
+      "text": "Held-out data used to pick hyper-parameters and stop training early."
+    },
+    {
+      "start": 1126,
+      "end": 1134,
+      "text": "The validation curve tells you when to stop."
+    },
+    {
+      "start": 1150,
+      "end": 1158,
+      "text": "Never tune on the test set."
+    },
+    {
+      "start": 1230,
+      "end": 1236,
+      "text": "Bigger models keep improving, but at rising cost — critics argue for efficiency."
+    },
+    {
+      "start": 1236,
+      "end": 1244,
+      "text": "This is a genuinely controversial topic and people disagree strongly."
+    },
+    {
+      "start": 1275,
+      "end": 1283,
+      "text": "Compute and energy costs grow quickly."
+    },
+    {
+      "start": 1330,
+      "end": 1336,
+      "text": "Tools like saliency maps offer partial, sometimes misleading explanations."
+    },
+    {
+      "start": 1336,
+      "end": 1344,
+      "text": "We can measure what the network does far better than we can explain why."
+    },
+    {
+      "start": 1370,
+      "end": 1378,
+      "text": "Important for medicine, finance and law."
+    }
+  ]
+}

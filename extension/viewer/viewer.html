@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TubeMind</title>
+    <link rel="icon" href="../icons/icon32.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Gochi+Hand&family=Kalam:wght@400;700&family=Patrick+Hand&family=Patrick+Hand+SC&display=swap"
+    />
+    <link rel="stylesheet" href="viewer.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="viewer.html" title="TubeMind home">
+        <img src="../icons/icon48.png" alt="" width="28" height="28" />
+        <span>TubeMind</span>
+        <i id="backend-status" class="status-dot" title="Checking backend…"></i>
+      </a>
+
+      <div class="title-block">
+        <input id="map-title" aria-label="Mindmap title" placeholder="Untitled mindmap" />
+        <div class="meta-line">
+          <a id="video-link" target="_blank" rel="noopener" hidden></a>
+          <span id="meta-chips"></span>
+        </div>
+      </div>
+
+      <nav class="toolbar" aria-label="Mindmap tools">
+        <div class="search">
+          <input id="search" type="search" placeholder="Search concepts…  (Enter = semantic)" aria-label="Search nodes" />
+          <div id="search-results" class="dropdown search-results" hidden></div>
+        </div>
+        <div id="layer-seg" class="seg" role="radiogroup" aria-label="Semantic layer"></div>
+        <button id="btn-study" class="btn" title="Flashcards & quizzes">🎓 Study</button>
+        <button id="btn-voice" class="btn icon-only" title="Voice commands">🎙</button>
+        <button id="btn-share" class="btn" title="Real-time collaboration">👥 Share</button>
+        <div class="menu">
+          <button id="btn-export" class="btn" aria-haspopup="true">⤓ Export</button>
+          <div id="export-menu" class="dropdown" hidden></div>
+        </div>
+        <div class="menu">
+          <button id="btn-more" class="btn icon-only" aria-haspopup="true" title="More">☰</button>
+          <div id="more-menu" class="dropdown dropdown-right" hidden></div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="stage">
+      <div id="canvas" tabindex="-1"></div>
+
+      <aside id="inspector" class="panel" hidden aria-label="Node inspector"></aside>
+
+      <div id="hud" class="hud"></div>
+      <div id="presence-bar" class="presence-bar"></div>
+
+      <div class="zoom-controls" role="group" aria-label="Zoom">
+        <button id="zoom-in" class="btn icon-only" title="Zoom in (+)">＋</button>
+        <button id="zoom-out" class="btn icon-only" title="Zoom out (−)">－</button>
+        <button id="zoom-fit" class="btn icon-only" title="Fit (f)">⤢</button>
+      </div>
+
+      <div id="voice-indicator" class="voice-indicator" hidden></div>
+
+      <section id="empty-state" class="empty-state" hidden>
+        <h1>Turn any video into a <span class="hl">mindmap</span></h1>
+        <p>Open a YouTube video and press the <b>Mindmap</b> button (or Alt+M) — or paste a link:</p>
+        <div class="empty-form">
+          <input id="empty-url" type="url" placeholder="https://www.youtube.com/watch?v=…" aria-label="YouTube URL" />
+          <button id="empty-generate" class="btn btn-accent">Generate</button>
+        </div>
+        <div class="panel-row center">
+          <button id="empty-demo" class="btn">🧪 Demo map</button>
+          <button id="empty-library" class="btn">📚 Library</button>
+          <button id="empty-join" class="btn">👥 Join room</button>
+        </div>
+        <div id="empty-recent" class="recent"></div>
+      </section>
+
+      <section id="progress-overlay" class="progress-overlay" hidden aria-live="polite">
+        <div class="progress-card">
+          <h2 id="progress-title">Your video</h2>
+          <ol id="progress-steps" class="progress-steps"></ol>
+          <div id="progress-bar" class="sketch-bar"><span></span></div>
+          <p id="progress-stage" class="progress-stage">Starting…</p>
+        </div>
+      </section>
+    </main>
+
+    <div id="context-menu" class="dropdown context-menu" hidden></div>
+    <div id="toasts"></div>
+
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
