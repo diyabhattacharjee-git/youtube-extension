@@ -148,7 +148,7 @@ def link_videos(maps: list[dict], threshold: float = 0.72, max_links: int = 60) 
         "schema": SCHEMA,
         "id": uuid.uuid4().hex[:16],
         "version": 1,
-        "meta": {"title": "Knowledge Hub", "videoId": None, "kind": "hub", "sources": [{"mapId": m.get("id"), "videoId": m["meta"].get("videoId"), "title": m["meta"].get("title")} for m in maps], "createdAt": int(time.time() * 1000), "mode": "hub", "profile": "balanced"},
+        "meta": {"title": "Knowledge Hub", "videoId": None, "kind": "hub", "sources": [{"mapId": m.get("id"), "videoId": m["meta"].get("videoId"), "title": m["meta"].get("title")} for m in maps], "createdAt": int(time.time() * 1000), "mode": "hub"},
         "root": hub_root,
         "edges": [],
     }

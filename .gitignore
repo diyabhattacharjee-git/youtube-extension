@@ -9,3 +9,5 @@ node_modules/
 dist/
 .DS_Store
 Thumbs.db
+SESSION_LOG.md
+OPTIMIZATION_README.md

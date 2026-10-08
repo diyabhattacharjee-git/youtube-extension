@@ -42,7 +42,7 @@ def refine(mindmap: dict, action: str, node_ids: list[str], instruction: str = "
     if not nodes or any(n is None for n in nodes):
         raise ValueError("node not found")
     ops = handlers[action](mindmap, nodes, instruction)
-    return {"ops": ops, "provider": llm.provider_name()}
+    return {"ops": ops}
 
 
 # ---------------------------------------------------------------------------
@@ -94,38 +94,55 @@ def _expand(mindmap: dict, nodes: list[dict], instruction: str) -> list[dict]:
 
 
 def _rewrite(mindmap: dict, nodes: list[dict], instruction: str) -> list[dict]:
+    """One LLM call for all selected nodes."""
+    budget = max(800, 5000 // len(nodes))
+    blocks = [
+        f"### {n['id']}\nCurrent label: {n['text']}\nSummary: {n.get('summary', '')}\nTranscript context:\n{_context(mindmap, n, limit=budget)}"
+        for n in nodes
+    ]
+    data = llm.chat_json(
+        SYSTEM,
+        f"Instruction: {instruction or 'make each label clearer and more precise'}\n\n" + "\n\n".join(blocks) + "\n\n"
+        'Return {"nodes": [{"id": "...", "label": "...", "summary": "one sentence"}]} with one entry per node id above.',
+        max_tokens=150 + 120 * len(nodes),
+    )
+    answers = _by_id(data)
     ops = []
     for node in nodes:
-        data = llm.chat_json(
-            SYSTEM,
-            f"Current label: {node['text']}\nSummary: {node.get('summary', '')}\nInstruction: {instruction or 'make it clearer and more precise'}\n"
-            f"Transcript context:\n{_context(mindmap, node, limit=2500)}\n\n"
-            'Return {"label": "...", "summary": "one sentence"}',
-            max_tokens=300,
-        )
-        if isinstance(data, dict) and data.get("label"):
-            ops.append({"type": "update", "id": node["id"], "patch": {"text": truncate(str(data["label"]), 120), "summary": truncate(str(data.get("summary") or node.get("summary", "")), 320)}})
+        item = answers.get(node["id"])
+        if item and item.get("label"):
+            ops.append({"type": "update", "id": node["id"], "patch": {"text": truncate(str(item["label"]), 120), "summary": truncate(str(item.get("summary") or node.get("summary", "")), 320)}})
         else:
             ops.append({"type": "update", "id": node["id"], "patch": {"text": smart_title(plain(node["text"]))}})
     return ops
 
 
 def _summarize(mindmap: dict, nodes: list[dict], instruction: str) -> list[dict]:
+    """One LLM call for all selected nodes."""
+    budget = max(800, 6000 // len(nodes))
+    blocks = [
+        f"### {n['id']}\nSubtree:\n" + "\n".join(outline(n, max_depth=3)) + f"\nTranscript context:\n{_context(mindmap, n, limit=budget)}"
+        for n in nodes
+    ]
+    data = llm.chat_json(
+        SYSTEM,
+        "\n\n".join(blocks) + "\n\n"
+        'Return {"nodes": [{"id": "...", "summary": "2-3 sentence summary for revision"}]} with one entry per node id above.',
+        max_tokens=150 + 150 * len(nodes),
+    )
+    answers = _by_id(data)
     ops = []
     for node in nodes:
-        sub = "\n".join(outline(node, max_depth=3))
-        data = llm.chat_json(
-            SYSTEM,
-            f"Subtree:\n{sub}\nTranscript context:\n{_context(mindmap, node, limit=3000)}\n\n"
-            'Return {"summary": "2-3 sentence summary for revision"}',
-            max_tokens=300,
-        )
-        if isinstance(data, dict) and data.get("summary"):
-            summary = str(data["summary"])
-        else:
+        summary = str((answers.get(node["id"]) or {}).get("summary") or "")
+        if not summary:
             summary = "; ".join(plain(c["text"]) for c in node.get("children", [])[:5])
         ops.append({"type": "update", "id": node["id"], "patch": {"summary": truncate(summary, 500)}})
     return ops
+
+
+def _by_id(data) -> dict[str, dict]:
+    items = data.get("nodes") if isinstance(data, dict) else None
+    return {str(i.get("id")): i for i in items or [] if isinstance(i, dict) and i.get("id")}
 
 
 def _reorganize(mindmap: dict, nodes: list[dict], instruction: str) -> list[dict]:

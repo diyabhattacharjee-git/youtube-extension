@@ -1,16 +1,13 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-canvas-theme="chalk">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TubeMind</title>
     <link rel="icon" href="../icons/icon32.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Gochi+Hand&family=Kalam:wght@400;700&family=Patrick+Hand&family=Patrick+Hand+SC&display=swap"
-    />
+    <link rel="preload" href="../fonts/atkinson-hyperlegible-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="../fonts/atkinson-hyperlegible-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="../shared/fonts.css" />
     <link rel="stylesheet" href="viewer.css" />
   </head>
   <body>
@@ -18,7 +15,7 @@
       <a class="brand" href="viewer.html" title="TubeMind home">
         <img src="../icons/icon48.png" alt="" width="28" height="28" />
         <span>TubeMind</span>
-        <i id="backend-status" class="status-dot" title="Checking backend…"></i>
+        <i id="backend-status" class="status-dot" title="Connecting…"></i>
       </a>
 
       <div class="title-block">
@@ -31,10 +28,11 @@
 
       <nav class="toolbar" aria-label="Mindmap tools">
         <div class="search">
-          <input id="search" type="search" placeholder="Search concepts…  (Enter = semantic)" aria-label="Search nodes" />
+          <input id="search" type="search" placeholder="Search concepts here" aria-label="Search nodes" />
           <div id="search-results" class="dropdown search-results" hidden></div>
         </div>
-        <div id="layer-seg" class="seg" role="radiogroup" aria-label="Semantic layer"></div>
+        <button id="btn-content-map" class="btn" aria-pressed="true" aria-controls="content-map" title="Numbered outline of the whole video">Content map</button>
+        <div id="layer-seg" class="seg" role="radiogroup" aria-label="What the map shows"></div>
         <button id="btn-study" class="btn" title="Flashcards & quizzes">🎓 Study</button>
         <button id="btn-voice" class="btn icon-only" title="Voice commands">🎙</button>
         <button id="btn-share" class="btn" title="Real-time collaboration">👥 Share</button>
@@ -49,10 +47,16 @@
       </nav>
     </header>
 
-    <main class="stage">
+    <main id="stage" class="stage">
       <div id="canvas" tabindex="-1"></div>
 
-      <aside id="inspector" class="panel" hidden aria-label="Node inspector"></aside>
+      <aside id="content-map" class="content-map" aria-label="Content map"></aside>
+
+      <div id="right-rail" class="right-rail">
+        <aside id="inspector" class="panel" hidden aria-label="Node inspector"></aside>
+        <section id="assistant" class="assistant-dock" hidden aria-label="Ask about this node"></section>
+      </div>
+      <div id="polish-pill" class="polish-pill" hidden role="status">Polishing labels…</div>
 
       <div id="hud" class="hud"></div>
       <div id="presence-bar" class="presence-bar"></div>
@@ -73,7 +77,7 @@
           <button id="empty-generate" class="btn btn-accent">Generate</button>
         </div>
         <div class="panel-row center">
-          <button id="empty-demo" class="btn">🧪 Demo map</button>
+          <button id="empty-demo" class="btn dev-only">🧪 Demo map</button>
           <button id="empty-library" class="btn">📚 Library</button>
           <button id="empty-join" class="btn">👥 Join room</button>
         </div>
@@ -86,6 +90,7 @@
           <ol id="progress-steps" class="progress-steps"></ol>
           <div id="progress-bar" class="sketch-bar"><span></span></div>
           <p id="progress-stage" class="progress-stage">Starting…</p>
+          <p id="progress-detail" class="progress-detail dev-only"></p>
         </div>
       </section>
     </main>

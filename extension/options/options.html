@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <title>TubeMind settings</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&display=swap" />
+    <link rel="stylesheet" href="../shared/fonts.css" />
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
@@ -11,53 +11,47 @@
       <h1><img src="../icons/icon48.png" alt="" width="36" height="36" /> TubeMind settings</h1>
 
       <fieldset>
-        <legend>Backend</legend>
-        <label>Pipeline server URL
+        <legend>Connection</legend>
+        <label>Server address
           <div class="row">
             <input id="backendUrl" type="url" />
             <button id="test" class="btn" type="button">Test</button>
           </div>
         </label>
-        <p id="health" class="hint">The Groq API key is configured on the server in the project's <code>.env</code> file — never in the browser.</p>
-        <label class="check"><input id="useLLM" type="checkbox" /> Use LLM (Groq, or the open-source fallback) to write node text</label>
-        <label class="check"><input id="allowWhisper" type="checkbox" /> Allow Whisper speech-to-text when a video has no captions</label>
-        <label class="check"><input id="serverKeyframes" type="checkbox" /> Extract slides &amp; charts on the server (needs opencv + yt-dlp)</label>
+        <p id="health" class="hint"></p>
+        <p class="hint dev-only">The Groq API key is configured on the server in the project's <code>.env</code> file — never in the browser.</p>
+        <label class="check"><input id="useLLM" type="checkbox" /> Polish labels with AI (the map is always built from the video's own words)</label>
+        <label class="check"><input id="prefetch" type="checkbox" /> Get the map ready in the background while I watch (faster, no AI)</label>
+        <label class="check"><input id="allowWhisper" type="checkbox" /> Use speech-to-text when a video has no captions (slower)</label>
+        <label class="check"><input id="serverKeyframes" type="checkbox" /> Add slides &amp; charts from the video to nodes<span class="dev-only"> (needs opencv + yt-dlp on the server)</span></label>
       </fieldset>
 
       <fieldset>
         <legend>Mindmap defaults</legend>
         <div class="grid">
-          <label>Summarization mode
+          <label>Map size
             <select id="mode">
-              <option value="revision">Quick revision</option>
-              <option value="academic">Academic research</option>
-              <option value="deep">Deep exploration</option>
-            </select>
-          </label>
-          <label>Learning profile
-            <select id="profile">
-              <option value="visual">Visual</option>
-              <option value="balanced">Balanced</option>
-              <option value="text">Text-heavy</option>
+              <option value="revision">Short (quick revision)</option>
+              <option value="academic">Standard</option>
+              <option value="deep">Detailed</option>
             </select>
           </label>
           <label>Theme
             <select id="theme">
+              <option value="chalk">Blackboard</option>
               <option value="sketch">Sketch notes</option>
               <option value="doodle">Yellow doodle</option>
-              <option value="chalk">Blackboard (dark)</option>
             </select>
           </label>
           <label>Layout
             <select id="layout">
               <option value="balanced">Balanced (clockwise)</option>
-              <option value="radial">Radial</option>
               <option value="right">Logical tree</option>
+              <option value="radial">Radial</option>
             </select>
           </label>
         </div>
-        <label class="check"><input id="adaptiveProfile" type="checkbox" /> Adapt the learning profile to how I use maps</label>
-        <label class="check"><input id="storyboardImages" type="checkbox" /> Add video thumbnails to nodes (YouTube storyboards)</label>
+        <label class="check"><input id="storyboardImages" type="checkbox" /> Add video thumbnails to sections (shown in the node panel)</label>
         <label class="check"><input id="followAlong" type="checkbox" /> Follow along: highlight the node for the current playback time</label>
         <label class="check"><input id="switchToVideoOnJump" type="checkbox" /> Switch to the video tab when jumping to a timestamp</label>
       </fieldset>
@@ -79,6 +73,11 @@
             </select>
           </label>
         </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Advanced</legend>
+        <label class="check"><input id="devMode" type="checkbox" /> Developer mode — show pipeline details, model names and demo data</label>
       </fieldset>
 
       <p id="saved" class="saved" hidden>Saved ✓</p>

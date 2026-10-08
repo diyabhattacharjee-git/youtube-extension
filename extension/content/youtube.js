@@ -7,6 +7,9 @@
  *    YouTube's own "Show transcript" panel does (innertube get_transcript), with
  *    the caption-track JSON as a second attempt. The backend has its own
  *    fallbacks (youtube-transcript-api → Whisper) if both fail.
+ *  • Prefetch: shortly after a video page loads, the context is collected once and sent
+ *    (via the service worker) to the backend, which builds + caches the map WITHOUT any AI.
+ *    Clicking "Mindmap" then reuses that context and the cached map opens almost instantly.
  *  • Executes timestamp jumps and frame captures requested by the viewer.
  *  • Broadcasts playback time so the viewer can "follow along".
  *
@@ -201,11 +204,51 @@
     return context;
   }
 
+  // ---------------------------------------------------------------------------
+  // Prefetch: collect once per video, reuse on click
+  // ---------------------------------------------------------------------------
+  const PREFETCH_DELAY = 2500; // let YouTube finish its own loading first
+  const CONTEXT_TTL = 15 * 60 * 1000;
+  let prepared = null; // { videoId, at, promise }
+  let prefetchTimer = null;
+
+  function contextFor(videoId) {
+    if (prepared && prepared.videoId === videoId && Date.now() - prepared.at < CONTEXT_TTL) return prepared.promise;
+    const promise = collectContext();
+    prepared = { videoId, at: Date.now(), promise };
+    promise.catch(() => (prepared = null));
+    return promise;
+  }
+
+  async function prefetchEnabled() {
+    try {
+      const { prefetch } = await chrome.storage.sync.get('prefetch');
+      return prefetch !== false;
+    } catch {
+      return false; // extension was reloaded: this old content script is orphaned
+    }
+  }
+
+  function schedulePrefetch() {
+    clearTimeout(prefetchTimer);
+    const videoId = currentVideoId();
+    if (!videoId) return;
+    prefetchTimer = setTimeout(async () => {
+      if (videoId !== currentVideoId() || !(await prefetchEnabled())) return;
+      try {
+        const context = await contextFor(videoId);
+        if (context.transcript?.length) await chrome.runtime.sendMessage({ type: 'TM_PREFETCH', context });
+      } catch {
+        /* prefetch is best effort */
+      }
+    }, PREFETCH_DELAY);
+  }
+
   async function generate() {
     const button = document.getElementById(BUTTON_ID);
     button?.classList.add('tm-busy');
     try {
-      const context = await collectContext();
+      const context = await contextFor(currentVideoId());
       await chrome.runtime.sendMessage({ type: 'TM_GENERATE', context });
     } catch (err) {
       alert(`TubeMind: ${err.message}`);
@@ -244,9 +287,11 @@
   const refresh = () => {
     document.getElementById(BUTTON_ID)?.remove();
     setTimeout(injectButton, 800);
+    schedulePrefetch();
   };
   document.addEventListener('yt-navigate-finish', refresh);
   injectButton();
+  schedulePrefetch();
   // The metadata area renders late; keep trying for a few seconds.
   let tries = 0;
   const retry = setInterval(() => {
@@ -279,7 +324,7 @@
         sendResponse({ ok: true });
         return false;
       case 'TM_COLLECT_CONTEXT':
-        collectContext()
+        contextFor(currentVideoId())
           .then((context) => sendResponse({ ok: true, context }))
           .catch((err) => sendResponse({ ok: false, error: err.message }));
         return true;

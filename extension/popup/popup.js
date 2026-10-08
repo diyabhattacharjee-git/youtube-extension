@@ -1,26 +1,28 @@
-/** Toolbar popup: generate for the active video (or any URL) with mode/profile choices. */
+/** Toolbar popup: generate for the active video (or any URL) with a map-size choice. */
 import { getSettings, parseVideoId, saveSettings } from '../shared/settings.js';
 
 const $ = (id) => document.getElementById(id);
 
 async function init() {
   const settings = await getSettings();
+  const dev = settings.devMode;
+  $('demo').hidden = !dev;
   $('mode').value = settings.mode;
-  $('profile').value = settings.profile;
   $('mode').addEventListener('change', (e) => saveSettings({ mode: e.target.value }));
-  $('profile').addEventListener('change', (e) => saveSettings({ profile: e.target.value }));
 
   // backend status
   fetch(`${settings.backendUrl.replace(/\/+$/, '')}/api/health`)
     .then((r) => r.json())
     .then((h) => {
       $('status').classList.add('online');
-      $('status').title = `Backend online · LLM: ${h.llm}`;
-      if (!h.groq) $('hint').textContent = 'Tip: add GROQ_API_KEY to .env for LLM-quality nodes.';
+      $('status').title = dev ? `Backend online · LLM: ${h.llm}` : 'Connected';
+      if (dev && !h.groq) $('hint').textContent = 'Tip: add GROQ_API_KEY to .env for LLM-quality nodes.';
     })
     .catch(() => {
-      $('status').title = 'Backend offline';
-      $('hint').textContent = `Backend offline at ${settings.backendUrl} — start it with "python -m app.main".`;
+      $('status').title = 'Not connected';
+      $('hint').textContent = dev
+        ? `Backend offline at ${settings.backendUrl} — start it with "python -m app.main".`
+        : 'TubeMind is not connected right now. Open Settings to check the connection.';
     });
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

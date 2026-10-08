@@ -7,19 +7,19 @@
  *   play / watch [<topic>]        jump the video to the node
  *   read / explain [<topic>]      text-to-speech of the node + summary
  *   next / previous / parent / child
- *   zoom in / zoom out / overview (fit)
- *   search <query>                layer overview | clusters | concepts | transcript
+ *   zoom in / zoom out / fit
+ *   search <query>                layer concepts | details
  *   add note <text>               add child <text>
  *   undo / redo / stop listening
  */
 import { fuzzyScore, plain, toast } from './shared.js';
 
-const LAYERS = { overview: 1, clusters: 2, concepts: 3, transcript: 4, all: 4 };
+const LAYERS = { concepts: 2, key: 2, details: 3, all: 3 };
 
 export class VoiceController extends EventTarget {
-  constructor({ model, renderer, seek, search, setLayer, lang = 'en-US', indicator, profile }) {
+  constructor({ model, renderer, seek, search, setLayer, lang = 'en-US', indicator }) {
     super();
-    Object.assign(this, { model, renderer, seek, search, setLayer, lang, indicator, profile });
+    Object.assign(this, { model, renderer, seek, search, setLayer, lang, indicator });
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     this.supported = !!Recognition;
     if (!this.supported) return;
@@ -53,7 +53,6 @@ export class VoiceController extends EventTarget {
     this.listening = true;
     this.rec.start();
     this.#indicate('Listening… say "help"');
-    this.profile?.track('voice');
     this.dispatchEvent(new Event('state'));
   }
 
@@ -147,7 +146,7 @@ export class VoiceController extends EventTarget {
       this.renderer.zoomBy(1.3);
     } else if (/zoom out/.test(text)) {
       this.renderer.zoomBy(1 / 1.3);
-    } else if (/^(overview|fit|show all|reset view)$/.test(text)) {
+    } else if (/^(fit|show all|reset view)$/.test(text)) {
       this.renderer.fit();
     } else if ((match = m(/^search (?:for )?(.+)$/))) {
       this.search(match[1]);
@@ -166,7 +165,7 @@ export class VoiceController extends EventTarget {
     } else if (/stop listening|stop voice|turn off/.test(text)) {
       this.stop();
     } else if (/^help/.test(text)) {
-      this.speak('Try: expand quantum, go to summary, play, read, next, zoom in, search entanglement, layer overview, add note, stop listening.');
+      this.speak('Try: expand quantum, go to summary, play, read, next, zoom in, search entanglement, layer details, add note, stop listening.');
     } else {
       toast(`🎙 Didn’t catch a command: “${text}”`);
     }

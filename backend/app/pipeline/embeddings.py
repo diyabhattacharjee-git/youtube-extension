@@ -78,7 +78,7 @@ class Embedder:
             mat = self._vectorizer.fit_transform(docs + ["placeholder"])
         n_components = min(128, mat.shape[1] - 1, len(docs) - 1)
         if n_components >= 2:
-            self._svd = TruncatedSVD(n_components=n_components, random_state=42).fit(mat)
+            self._svd = TruncatedSVD(n_components=n_components, n_iter=3, random_state=42).fit(mat)
 
     def encode(self, texts: list[str]) -> np.ndarray:
         if not texts:

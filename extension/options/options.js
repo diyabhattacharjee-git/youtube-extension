@@ -6,6 +6,7 @@ let savedTimer;
 
 async function init() {
   const settings = await getSettings();
+  document.documentElement.classList.toggle('dev', !!settings.devMode);
   for (const key of Object.keys(DEFAULT_SETTINGS)) {
     const input = $(key);
     if (!input) continue;
@@ -34,6 +35,10 @@ async function save(key, input) {
     }
   }
   await saveSettings({ [key]: value });
+  if (key === 'devMode') {
+    document.documentElement.classList.toggle('dev', !!value);
+    testBackend();
+  }
   $('saved').hidden = false;
   clearTimeout(savedTimer);
   savedTimer = setTimeout(() => ($('saved').hidden = true), 1400);
@@ -48,12 +53,16 @@ async function testBackend() {
   try {
     const h = await (await fetch(`${base}/api/health`)).json();
     out.className = 'hint ok';
-    out.textContent = `✓ Online — LLM: ${h.llm} · embeddings: ${h.embeddings} · Whisper: ${h.whisper ? 'yes' : 'no'} · keyframes: ${h.keyframes ? 'yes' : 'no'} · Notion: ${h.notion ? 'yes' : 'no'}`;
+    out.textContent = $('devMode').checked
+      ? `✓ Online — LLM: ${h.llm} · embeddings: ${h.embeddings} · Whisper: ${h.whisper ? 'yes' : 'no'} · keyframes: ${h.keyframes ? 'yes' : 'no'} · Notion: ${h.notion ? 'yes' : 'no'}`
+      : '✓ Connected';
     $('serverKeyframes').disabled = !h.keyframes;
     $('allowWhisper').disabled = !h.whisper;
   } catch {
     out.className = 'hint bad';
-    out.textContent = `✗ Cannot reach ${base}. Start the backend: cd backend && python -m app.main`;
+    out.textContent = $('devMode').checked
+      ? `✗ Cannot reach ${base}. Start the backend: cd backend && python -m app.main`
+      : `✗ Cannot connect to ${base}.`;
   }
 }
 

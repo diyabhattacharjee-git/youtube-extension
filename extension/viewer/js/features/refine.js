@@ -65,7 +65,7 @@ function offlineRefine(model, action, ids) {
         type: 'add',
         parentId: node.id,
         index: node.children.length + i,
-        node: createNode({ text: `“${truncateText(e.text, 140)}”`, type: 'transcript', layer: 4, start: e.start, end: e.end }),
+        node: createNode({ text: truncateText(e.text, 140), type: 'detail', layer: 3, start: e.start, end: e.end, source: e.text }),
       }));
   }
   if (action === 'summarize') {

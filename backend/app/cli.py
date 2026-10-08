@@ -2,7 +2,7 @@
 Command-line demo: convert a YouTube lecture into a mindmap JSON without the extension.
 
     cd backend
-    python -m app.cli "https://www.youtube.com/watch?v=VIDEO_ID" --mode academic --out ../examples/my-lecture.json
+    python -m app.cli "https://www.youtube.com/watch?v=VIDEO_ID" --mode revision --out ../examples/my-lecture.json
 
 Then open the extension viewer → "Open file" and load the JSON (or drag it onto the canvas).
 """
@@ -24,8 +24,7 @@ from .pipeline.text_utils import fmt_time
 def main() -> int:
     parser = argparse.ArgumentParser(description="TubeMind: YouTube → mindmap JSON")
     parser.add_argument("url", help="YouTube URL or 11-character video id")
-    parser.add_argument("--mode", choices=["academic", "revision", "deep"], default="academic")
-    parser.add_argument("--profile", choices=["visual", "balanced", "text"], default="balanced")
+    parser.add_argument("--mode", choices=["revision", "academic", "deep"], default="revision", help="revision = Short (default), academic = Standard, deep = Detailed")
     parser.add_argument("--title", default=None, help="video title (optional, improves the central idea)")
     parser.add_argument("--no-llm", action="store_true", help="skip Groq/LLM, heuristics only")
     parser.add_argument("--no-whisper", action="store_true")
@@ -41,7 +40,7 @@ def main() -> int:
         print(f"\r[{bar:<24}] {pct * 100:5.1f}%  {stage[:70]:<70}", end="", flush=True)
 
     result = generate_mindmap(
-        {"videoId": video_id, "title": args.title, "mode": args.mode, "profile": args.profile, "useLLM": not args.no_llm, "allowWhisper": not args.no_whisper},
+        {"videoId": video_id, "title": args.title, "mode": args.mode, "useLLM": not args.no_llm, "allowWhisper": not args.no_whisper},
         progress,
     )
     print()

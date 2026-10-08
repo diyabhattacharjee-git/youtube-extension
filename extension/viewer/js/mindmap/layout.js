@@ -1,10 +1,10 @@
 /**
  * Layout algorithms. Input: visible tree + node sizes. Output: centre positions.
  *
- *  balanced — classic mind map: first-level branches split left/right so both sides
- *             have similar height, ordered CLOCKWISE (top-right → bottom-right →
+ *  balanced — classic mind map (default): first-level branches split left/right so both
+ *             sides have similar height, ordered CLOCKWISE (top-right → bottom-right →
  *             bottom-left → top-left) so reading order follows the video timeline.
- *  right    — logical tree growing to the right (good for long outlines).
+ *  right    — logical tree growing to the right: numbered sections read top to bottom.
  *  radial   — branches radiate around the centre, angle proportional to leaf count.
  */
 
@@ -61,7 +61,8 @@ export function computeLayout(root, sizeOf, childrenOf, options) {
 
   positions.set(root.id, { node: root, x: 0, y: 0, ...rootSize, depth: 0, side: 0, parentId: null });
 
-  if (options.layout === 'right' || first.length <= 1) {
+  if (options.layout !== 'balanced' || first.length <= 1) {
+    // logical tree: sections stacked top to bottom in video order
     const total = first.reduce((s, k) => s + subtreeHeight(k, 1), 0) + gapV(1) * Math.max(0, first.length - 1);
     let cursor = -total / 2;
     for (const kid of first) {

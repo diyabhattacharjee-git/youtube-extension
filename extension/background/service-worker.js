@@ -4,6 +4,7 @@
  * Responsibilities — deliberately small, because MV3 service workers are
  * short-lived and long pipelines run in the viewer page instead:
  *   • open the viewer tab for a generation request
+ *   • prefetch: forward a video's context to the backend so its map is ready before the click
  *   • route timestamp jumps / frame captures to the right YouTube tab
  *   • context menus + keyboard command
  */
@@ -26,7 +27,7 @@ chrome.runtime.onInstalled.addListener(async () => {
       contexts: ['link'],
       targetUrlPatterns: ['https://www.youtube.com/watch*', 'https://youtu.be/*', 'https://www.youtube.com/shorts/*'],
     });
-  });
+  }); 
 });
 
 /** Store the request in session storage (can be large: full transcript) and open the viewer. */
@@ -36,6 +37,24 @@ async function openViewerForRequest(context, openerTab) {
   const url = chrome.runtime.getURL(`${VIEWER}?req=${requestId}`);
   const tab = await chrome.tabs.create({ url, index: openerTab ? openerTab.index + 1 : undefined, openerTabId: openerTab?.id });
   return { requestId, tabId: tab.id };
+}
+
+/** Warm the backend cache for a video (map built from the transcript, no AI). Best effort. */
+async function prefetch(context) {
+  const settings = await getSettings();
+  if (!settings.prefetch || !context?.videoId) return { ok: false };
+  const { videoId, title, channel, description, duration, chapters, transcript, languages } = context;
+  try {
+    const res = await fetch(`${settings.backendUrl.replace(/\/+$/, '')}/api/prefetch`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ videoId, title, channel, description, duration, chapters, transcript, languages, mode: settings.mode }),
+      signal: AbortSignal.timeout(5000),
+    });
+    return { ok: res.ok, ...(res.ok ? await res.json() : {}) };
+  } catch {
+    return { ok: false };
+  }
 }
 
 async function findVideoTabs(videoId) {
@@ -87,6 +106,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return seek(msg.videoId, msg.seconds);
       case 'TM_CAPTURE':
         return captureFrame(msg.videoId);
+      case 'TM_PREFETCH':
+        return prefetch(msg.context);
       case 'TM_OPEN_VIEWER': {
         const query = new URLSearchParams(msg.params || {}).toString();
         await chrome.tabs.create({ url: chrome.runtime.getURL(`${VIEWER}${query ? `?${query}` : ''}`) });
@@ -96,7 +117,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return undefined; // not for us (e.g. TM_TIMEUPDATE is consumed by viewer pages)
     }
   };
-  const known = ['TM_GENERATE', 'TM_SEEK', 'TM_CAPTURE', 'TM_OPEN_VIEWER'];
+  const known = ['TM_GENERATE', 'TM_SEEK', 'TM_CAPTURE', 'TM_OPEN_VIEWER', 'TM_PREFETCH'];
   if (!known.includes(msg?.type)) return false;
   handle()
     .then(sendResponse)

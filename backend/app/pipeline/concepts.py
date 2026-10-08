@@ -74,15 +74,17 @@ class ConceptGraph:
         return {"concepts": [c.to_dict() for c in self.concepts], "edges": self.edges}
 
 
+# "<a> ... <b>": the text BETWEEN two concept mentions decides the relation.
+# Compiled once — building per-pair regexes used to dominate pipeline time.
 RELATION_PATTERNS = [
-    (r"{a}\s+(?:is|are)\s+(?:a|an|the)?\s*(?:type|kind|form|example)\s+of\s+{b}", "is a type of"),
-    (r"{a}\s+(?:is|are)\s+(?:a|an)\s+{b}", "is a"),
-    (r"{a}\s+(?:uses?|relies on|depends on|requires?)\s+(?:the\s+)?{b}", "uses"),
-    (r"{a}\s+(?:causes?|leads? to|results? in|produces?)\s+(?:the\s+)?{b}", "leads to"),
-    (r"{a}\s+(?:contains?|includes?|consists? of|has|have)\s+(?:the\s+)?{b}", "contains"),
-    (r"{a}\s+(?:vs\.?|versus|compared to|unlike)\s+(?:the\s+)?{b}", "contrasts with"),
-    (r"{a}\s+(?:improves?|increases?|boosts?|enables?)\s+(?:the\s+)?{b}", "enables"),
-    (r"{a}\s+(?:reduces?|decreases?|prevents?|limits?)\s+(?:the\s+)?{b}", "reduces"),
+    (re.compile(r"\s+(?:is|are)\s+(?:a|an|the)?\s*(?:type|kind|form|example)\s+of\s+"), "is a type of"),
+    (re.compile(r"\s+(?:is|are)\s+(?:a|an)\s+"), "is a"),
+    (re.compile(r"\s+(?:uses?|relies on|depends on|requires?)\s+(?:the\s+)?"), "uses"),
+    (re.compile(r"\s+(?:causes?|leads? to|results? in|produces?)\s+(?:the\s+)?"), "leads to"),
+    (re.compile(r"\s+(?:contains?|includes?|consists? of|has|have)\s+(?:the\s+)?"), "contains"),
+    (re.compile(r"\s+(?:vs\.?|versus|compared to|unlike)\s+(?:the\s+)?"), "contrasts with"),
+    (re.compile(r"\s+(?:improves?|increases?|boosts?|enables?)\s+(?:the\s+)?"), "enables"),
+    (re.compile(r"\s+(?:reduces?|decreases?|prevents?|limits?)\s+(?:the\s+)?"), "reduces"),
 ]
 
 
@@ -188,8 +190,10 @@ def extract_concepts(segments: list[Segment], max_concepts: int = 60) -> Concept
     for i, c in enumerate(concepts):
         c.id = f"c{i + 1}"
 
-    _locate_mentions(concepts, segments)
-    edges = _build_graph(concepts, segments)
+    blocks = [block for seg in segments for block in seg.blocks]
+    presence = _mention_matrix(concepts, blocks)
+    _locate_mentions(concepts, blocks, presence)
+    edges = _build_graph(concepts, segments, blocks, presence)
     return ConceptGraph(concepts, edges)
 
 
@@ -216,31 +220,33 @@ def _group_similar(phrases: list[str], vecs: np.ndarray, threshold: float = 0.82
     return list(groups.values())
 
 
-def _locate_mentions(concepts: list[Concept], segments: list[Segment]) -> None:
-    for c in concepts:
-        pats = [re.compile(r"\b" + re.escape(a) + r"\b", re.I) for a in c.aliases[:5]]
-        for seg in segments:
-            for block in seg.blocks:
-                if any(p.search(block.text) for p in pats):
-                    c.mentions.append(block.start)
-        c.mentions.sort()
+def _mention_matrix(concepts: list[Concept], blocks: list) -> np.ndarray:
+    """presence[i, j] = concept i is mentioned in block j (one combined word-boundary regex per concept)."""
+    presence = np.zeros((len(concepts), len(blocks)), dtype=bool)
+    for i, c in enumerate(concepts):
+        pattern = re.compile(r"(?:" + "|".join(re.escape(a) for a in c.aliases[:5]) + r")", re.I)
+        presence[i] = [bool(pattern.search(b.text)) for b in blocks]
+    return presence
+
+
+def _locate_mentions(concepts: list[Concept], blocks: list, presence: np.ndarray) -> None:
+    for i, c in enumerate(concepts):
+        c.mentions = sorted(blocks[j].start for j in np.nonzero(presence[i])[0])
         c.first_ts = c.mentions[0] if c.mentions else 0.0
 
 
-def _build_graph(concepts: list[Concept], segments: list[Segment]) -> list[dict]:
+def _build_graph(concepts: list[Concept], segments: list[Segment], blocks: list, presence: np.ndarray) -> list[dict]:
     graph = nx.Graph()
     for c in concepts:
         graph.add_node(c.id)
 
-    pats = {c.id: [re.compile(r"\b" + re.escape(a) + r"\b", re.I) for a in c.aliases[:5]] for c in concepts}
     sentences: list[str] = []
-    for seg in segments:
-        for block in seg.blocks:
-            present = [cid for cid, ps in pats.items() if any(p.search(block.text) for p in ps)]
-            for a, b in combinations(present, 2):
-                w = graph.get_edge_data(a, b, {}).get("weight", 0.0)
-                graph.add_edge(a, b, weight=w + 1.0)
-            sentences.extend(split_sentences(block.text))
+    for j, block in enumerate(blocks):
+        present = [concepts[i].id for i in np.nonzero(presence[:, j])[0]]
+        for a, b in combinations(present, 2):
+            w = graph.get_edge_data(a, b, {}).get("weight", 0.0)
+            graph.add_edge(a, b, weight=w + 1.0)
+        sentences.extend(split_sentences(block.text))
 
     # semantic similarity edges connect concepts that are never said together
     if len(concepts) > 1:
@@ -262,26 +268,35 @@ def _build_graph(concepts: list[Concept], segments: list[Segment]) -> list[dict]
             c.centrality = pr.get(c.id, 0.0)
 
     by_id = {c.id: c for c in concepts}
+    lowered = [s.lower() for s in sentences]
+    alias_res = {c.id: re.compile("|".join(re.escape(x) for x in c.aliases[:3])) for c in concepts}
+    mentions: dict[str, set[int]] = {}
+
+    def mentioned_in(cid: str) -> set[int]:
+        if cid not in mentions:
+            mentions[cid] = {i for i, s in enumerate(lowered) if alias_res[cid].search(s)}
+        return mentions[cid]
+
     edges = []
     for a, b, data in sorted(graph.edges(data=True), key=lambda e: -e[2]["weight"])[: len(concepts) * 2]:
-        label, reverse = _relation_label(by_id[a], by_id[b], sentences)
+        shared = sorted(mentioned_in(a) & mentioned_in(b))
+        label, reverse = _relation_label(alias_res[a], alias_res[b], [lowered[i] for i in shared])
         if reverse:
             a, b = b, a
         edges.append({"source": a, "target": b, "weight": round(data["weight"], 3), "label": label})
     return edges
 
 
-def _relation_label(a: Concept, b: Concept, sentences: list[str]) -> tuple[str, bool]:
-    """Return (label, reversed) — reversed means the relation reads "b <label> a"."""
-    alias_a = "|".join(re.escape(x) for x in a.aliases[:3])
-    alias_b = "|".join(re.escape(x) for x in b.aliases[:3])
-    for sent in sentences:
-        low = sent.lower()
-        if not (re.search(alias_a, low) and re.search(alias_b, low)):
-            continue
-        for tpl, label in RELATION_PATTERNS:
-            if re.search(tpl.format(a=f"(?:{alias_a})", b=f"(?:{alias_b})"), low):
-                return label, False
-            if re.search(tpl.format(a=f"(?:{alias_b})", b=f"(?:{alias_a})"), low):
-                return label, True
+def _relation_label(re_a: re.Pattern, re_b: re.Pattern, sentences: list[str]) -> tuple[str, bool]:
+    """Return (label, reversed) — reversed means the relation reads "b <label> a".
+    `sentences` are lower-cased sentences that mention both concepts."""
+    for low in sentences:
+        spans_a = [m.span() for m in re_a.finditer(low)]
+        spans_b = [m.span() for m in re_b.finditer(low)]
+        for pattern, label in RELATION_PATTERNS:
+            for (sa, ea), (sb, eb) in ((x, y) for x in spans_a for y in spans_b):
+                if ea <= sb and pattern.fullmatch(low[ea:sb]):
+                    return label, False
+                if eb <= sa and pattern.fullmatch(low[eb:sa]):
+                    return label, True
     return "related to", False

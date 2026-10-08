@@ -86,8 +86,8 @@ export class SearchController {
     this.results.hidden = false;
   }
 
-  pick(id, close = true) {
-    this.renderer.reveal(id);
+  pick(hit, close = true) {
+    const id = this.renderer.reveal(hit); // a hidden grounding quote resolves to the node that shows it
     this.renderer.select(id);
     this.renderer.centerOn(id, { zoom: Math.max(this.renderer.view.k, 0.85) });
     this.onPick?.(id);

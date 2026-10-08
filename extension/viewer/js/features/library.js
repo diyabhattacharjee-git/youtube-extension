@@ -6,6 +6,7 @@
  *     its own video moment
  *   • "Merge maps" unifies several maps (e.g. two students' versions) into one
  */
+import { MODE_LABELS } from '../../../shared/settings.js';
 import { deleteMap, getMap, listMaps, saveMap } from '../lib/storage.js';
 import { el, modal, toast } from './shared.js';
 
@@ -51,7 +52,7 @@ export class Library {
               m.videoId ? el('img', { src: `https://i.ytimg.com/vi/${m.videoId}/mqdefault.jpg`, alt: '', loading: 'lazy' }) : el('div', { class: 'library-thumb' }, m.kind === 'hub' ? '🕸' : '🧠'),
               el('div', { class: 'library-meta' }, [
                 el('strong', {}, m.title),
-                el('small', {}, [m.channel, m.mode, `${m.nodeCount} nodes`, m.roomId ? `room ${m.roomId}` : '', new Date(m.updatedAt).toLocaleString()].filter(Boolean).join(' · ')),
+                el('small', {}, [m.channel, MODE_LABELS[m.mode] || '', `${m.nodeCount} nodes`, m.roomId ? `room ${m.roomId}` : '', new Date(m.updatedAt).toLocaleString()].filter(Boolean).join(' · ')),
               ]),
               el('button', {
                 class: 'btn btn-small',
@@ -63,7 +64,7 @@ export class Library {
             ]);
           }),
         )
-      : el('p', { class: 'hint' }, 'No saved mindmaps yet. Generate one from a YouTube video or open the demo.');
+      : el('p', { class: 'hint' }, 'No saved mindmaps yet. Open a YouTube video and press the Mindmap button.');
     this.body.replaceChildren(actions, list);
   }
 

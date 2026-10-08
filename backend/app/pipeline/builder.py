@@ -1,32 +1,41 @@
 """
 Layer 4 + 5 glue — turns segments + concepts into the hierarchical mindmap JSON.
 
-Semantic layers of the produced tree:
-    layer 0  root        central idea of the video
-    layer 1  section     chapters / themes (from segmentation)
-    layer 2  concept     key concepts, refined by the LLM ("Qubits: basic unit of quantum info")
-    layer 3  detail      supporting sub-points
-    layer 4  transcript  verbatim transcript leaves with timestamps (grounding)
+The map is a last-minute revision sketchbook:
+    layer 0  root        topic of the video (one-line summary underneath)
+    layer 1  section     numbered sections in video order, each with a time range and a
+                         1–2 sentence summary picked by the extractive summary retriever
+    layer 2  concept     key concepts as "Term: one-line meaning"
+    layer 3  detail      lazy "+" items tagged Def / Eg / Formula / Tip / Watch-out
+    layer 4  transcript  verbatim grounding quotes (kept in the JSON, not shown in the viewer)
+    + a final "Quick recall" section: a one-line summary and 3–6 must-remember points
 
-Every node carries `start`/`end` seconds so the UI can jump to the video moment.
+Non-English transcripts are translated to English ONCE (NLLB-200, see `translate.py`) right
+after the transcript fetch, so every later stage — and every node — works on English text.
+
+The whole tree is built from the transcript WITHOUT an LLM (`build_skeleton`, well under
+a second). Every node carries a real transcript span (`start`/`end`), the exact
+sentence it came from (`source`) and a faithfulness score (`faith`). An LLM, if
+configured, is then called ONCE to rewrite the labels (see `labels.py`) — it never writes
+the tree, timestamps or transcript leaves.
 """
 from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Callable
 
 import numpy as np
 
-from . import llm
+from . import llm, translate
 from .concepts import ConceptGraph, extract_concepts
-from .embeddings import Embedder, backend_name, cosine_matrix, embed
+from .embeddings import Embedder, backend_name, cosine_matrix
 from .segmentation import Segment, segment_transcript
-from .text_utils import fmt_time, parse_description_chapters, smart_title, truncate
+from .text_utils import VERB_FORMS, fmt_time, parse_description_chapters, smart_title, truncate
 from .tone import detect_tone, merge_tone
 from .transcript import Transcript, TranscriptEntry, get_transcript, sentences_with_time
 
@@ -41,18 +50,21 @@ class ModeConfig:
     concepts: int
     details: int
     leaves: int
-    excerpt_chars: int
     detail_words: int
+    expanded: bool = False  # everything shown: no collapsed concepts, no lazy "+", untagged supporting lines too
 
 
 MODES = {
-    # quick revision: few, punchy nodes
-    "revision": ModeConfig(concepts=3, details=2, leaves=1, excerpt_chars=4500, detail_words=14),
-    # academic research: definitions, more concepts, evidence leaves
-    "academic": ModeConfig(concepts=5, details=3, leaves=2, excerpt_chars=6500, detail_words=22),
-    # deep exploration: everything
-    "deep": ModeConfig(concepts=7, details=4, leaves=3, excerpt_chars=8000, detail_words=28),
+    # Short (default): exam-revision density — few, punchy nodes; level 3 behind "+N"
+    "revision": ModeConfig(concepts=3, details=2, leaves=1, detail_words=14),
+    # Standard: more concepts and tagged items; level 3 behind "+N"
+    "academic": ModeConfig(concepts=5, details=3, leaves=2, detail_words=16),
+    # Detailed: the full map, nothing hidden
+    "deep": ModeConfig(concepts=7, details=5, leaves=3, detail_words=20, expanded=True),
 }
+DEFAULT_MODE = "revision"
+SUMMARY_POINTS = 3  # extractive summary retriever: representative sentences per section
+TAGS = ("Def", "Formula", "Eg", "Tip", "Watch-out")  # level-3 type tags, in display order
 
 
 def new_id(prefix: str = "n") -> str:
@@ -82,12 +94,30 @@ def make_node(text: str, type_: str, layer: int, start: float | None = None, end
 
 # ---------------------------------------------------------------------------
 def generate_mindmap(request: dict, progress: ProgressFn | None = None) -> dict:
-    """End-to-end pipeline: Video → Transcript → Segments → Concepts → LLM → Mindmap JSON."""
+    """Skeleton + (when enabled) the single label call applied in place. Used by the CLI and tests."""
+    from . import labels
+
+    mindmap = build_skeleton(request, progress)
+    if request.get("useLLM", True) and llm.fast_available():
+        (progress or (lambda m, p: None))("Polishing", 0.9)
+        labels.apply_outcome(mindmap, labels.label_map(mindmap))
+    return mindmap
+
+
+def build_skeleton(request: dict, progress: ProgressFn | None = None) -> dict:
+    """Video → Transcript → Segments → Concepts → complete, usable mindmap. No LLM."""
     progress = progress or (lambda msg, pct: None)
-    t0 = time.time()
+    t_start = tick = time.perf_counter()
+    timings: dict[str, int] = {}
+
+    def lap(name: str) -> None:
+        nonlocal tick
+        now = time.perf_counter()
+        timings[name] = round((now - tick) * 1000)
+        tick = now
+
     video_id = request["videoId"]
-    mode = request.get("mode", "academic") if request.get("mode") in MODES else "academic"
-    profile = request.get("profile", "balanced")
+    mode = request.get("mode") if request.get("mode") in MODES else DEFAULT_MODE
     cfg = MODES[mode]
 
     # 1. Transcript -----------------------------------------------------------
@@ -100,59 +130,80 @@ def generate_mindmap(request: dict, progress: ProgressFn | None = None) -> dict:
         progress=lambda m, p: progress(m, 0.05 + p * 0.2),
     )
     duration = float(request.get("duration") or transcript.duration)
+    lap("transcript")
+
+    # 1b. English only: detect the language once; translate once (cached) BEFORE every other stage
+    title = request.get("title") or "YouTube video"
+    chapters = [dict(c) for c in (request.get("chapters") or parse_description_chapters(request.get("description", ""), duration))]
+    tinfo = translate.to_english(
+        video_id, transcript, _language_hint(request, transcript), [title] + [str(c.get("title") or "") for c in chapters],
+        min_coverage=float(request.get("minCoverage") or 1.0),  # a click may start from an evenly spread part
+    )
+    progress("Reading the video", 0.25)
+    if tinfo.lang != "en" and tinfo.extras:
+        title = tinfo.extras[0] or title
+        for chapter, name in zip(chapters, tinfo.extras[1:]):
+            chapter["title"] = name or chapter.get("title")
+    lap("translate")
+    timings["detect"] = round(tinfo.detect_ms)
+    timings["translate"] = max(0, timings["translate"] - timings["detect"])
 
     # 2. Segmentation -----------------------------------------------------------
-    progress(f"Segmenting {fmt_time(duration)} of transcript ({transcript.source})", 0.28)
-    chapters = request.get("chapters") or parse_description_chapters(request.get("description", ""), duration)
+    progress(f"Segmenting {fmt_time(duration)} of transcript ({transcript.source})", 0.3)
     segments = segment_transcript(transcript, chapters, mode)
+    lap("segment")
 
     # 3. Concepts + knowledge graph ------------------------------------------------
-    progress(f"Extracting concepts from {len(segments)} sections", 0.38)
+    progress(f"Extracting concepts from {len(segments)} sections", 0.5)
     graph = extract_concepts(segments, max_concepts=max(30, len(segments) * cfg.concepts * 2))
+    lap("concepts")
 
-    # 4. LLM refinement (parallel per section) ---------------------------------------
-    sentences = sentences_with_time(transcript.entries)
-    title = request.get("title") or "YouTube video"
-    use_llm = llm.available() and request.get("useLLM", True)
-    done = 0
+    # 4. Tree assembly: one embedding pass over all sentences, batched grounding ------
+    progress("Assembling nodes", 0.7)
+    index = SentenceIndex(sentences_with_time(transcript.entries))
+    clock = {"summary": 0.0}
+    used_terms: set[str] = set()
+    sections = [_assemble_section(seg, graph.for_segment(seg.id, limit=cfg.concepts * 2), index, cfg, clock, used_terms) for seg in segments]
+    lap("assemble")
+    timings["summary"] = round(clock["summary"])
 
-    def work(seg: Segment) -> dict:
-        nonlocal done
-        seg_sents = [s for s in sentences if seg.start - 0.5 <= s.start < seg.end + 0.5] or seg.blocks
-        concepts = graph.for_segment(seg.id, limit=cfg.concepts * 2)
-        result = None
-        if use_llm:
-            result = _llm_section(title, seg, concepts, seg_sents, cfg, profile, len(segments))
-        section = _assemble_section(seg, concepts, seg_sents, result, cfg, profile)
-        done += 1
-        progress(f"Writing nodes for section {done}/{len(segments)}" + (" with " + llm.provider_name() if use_llm else ""), 0.42 + 0.45 * done / max(len(segments), 1))
-        return section
-
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        sections = list(pool.map(work, segments))
-
-    # 5. Root + cross links -----------------------------------------------------------
-    progress("Linking concepts across sections", 0.9)
-    root_info = _llm_root(title, sections) if use_llm else None
     root = make_node(
-        (root_info or {}).get("central_idea") or _short_title(title),
+        _short_title(title),
         "root",
         0,
         0,
         duration,
-        summary=(root_info or {}).get("overview") or _heuristic_overview(sections),
-        tone=merge_tone(detect_tone(transcript.full_text), (root_info or {}).get("tone")),
+        summary=_heuristic_overview(sections),
+        tone=merge_tone(detect_tone(transcript.full_text), None),
         keywords=[c.label for c in sorted(graph.concepts, key=lambda c: -c.centrality)[:8]],
     )
-    root["children"] = sections
     for i, sec in enumerate(sections):
         sec["color"] = i % 5
+    recall = _recall_branch(sections, duration)
+    root["children"] = sections + ([recall] if recall else [])
 
-    edges = _cross_edges(root, graph, (root_info or {}).get("links") or [])
+    # 5. Cross links (knowledge graph + embedding similarity) + faithfulness ---------
+    edges = _cross_edges(root, graph, index)
+    score_faithfulness([n for sec in root["children"] for n in _walk(sec)], index.encoder, {sec["id"]: seg.text[:6000] for sec, seg in zip(sections, segments)})
+    lap("edges")
+
+    # 6. Final guard: every node label/summary is English (re-translates stragglers only)
+    guarded = translate.guard_map({"root": root}, tinfo.lang) if tinfo.lang != "en" else 0
+    lap("guard")
+    timings["total"] = round((time.perf_counter() - t_start) * 1000)
+    timings["skeleton"] = timings["total"] - timings["transcript"] - timings["detect"] - timings["translate"]
+
+    n_concepts = sum(1 for sec in sections for c in sec["children"] if c["type"] == "concept")
+    log.info(
+        "skeleton %s mode=%s lang=%s sections=%d concepts=%d | transcript=%dms detect=%dms translate=%dms (%s) segment=%dms concepts=%dms "
+        "assemble=%dms summary=%dms edges=%dms guard=%dms(%d fixed) skeleton=%dms total=%dms",
+        video_id, mode, tinfo.lang, len(sections), n_concepts, timings["transcript"], timings["detect"], timings["translate"], tinfo.status, timings["segment"],
+        timings["concepts"], timings["assemble"], timings["summary"], timings["edges"], timings["guard"], guarded, timings["skeleton"], timings["total"],
+    )
 
     mindmap = {
         "schema": SCHEMA,
-        "id": hashlib.sha1(f"{video_id}:{mode}:{profile}:{time.time()}".encode()).hexdigest()[:16],
+        "id": hashlib.sha1(f"{video_id}:{mode}:{time.time()}".encode()).hexdigest()[:16],
         "version": 1,
         "meta": {
             "videoId": video_id,
@@ -161,13 +212,17 @@ def generate_mindmap(request: dict, progress: ProgressFn | None = None) -> dict:
             "url": f"https://www.youtube.com/watch?v={video_id}",
             "duration": duration,
             "mode": mode,
-            "profile": profile,
             "language": transcript.language,
+            "sourceLanguage": tinfo.lang,
+            "translation": tinfo.to_dict(),
+            "originalTitle": request.get("title") or "",
             "transcriptSource": transcript.source,
-            "llm": llm.provider_name() if use_llm else "heuristic",
+            "llm": "heuristic",
+            "labelled": False,
             "embeddings": backend_name(),
             "createdAt": int(time.time() * 1000),
-            "buildSeconds": round(time.time() - t0, 1),
+            "buildSeconds": round(timings["total"] / 1000, 2),
+            "timings": timings,
             "storyboardSpec": request.get("storyboardSpec"),
         },
         "root": root,
@@ -176,209 +231,284 @@ def generate_mindmap(request: dict, progress: ProgressFn | None = None) -> dict:
         "graph": graph.to_dict(),
         "transcript": [{"start": round(e.start, 2), "end": round(e.end, 2), "text": e.text} for e in transcript.entries],
     }
-    progress("Done", 1.0)
+    progress("Map ready", 0.85)
     return mindmap
 
 
 # ---------------------------------------------------------------------------
-# LLM prompts
+# Sentence index: ONE encoder + ONE encode pass for every transcript sentence
 # ---------------------------------------------------------------------------
-SECTION_SYSTEM = """You are an expert study-note writer. You turn one section of a video transcript
-into hierarchical mind-map nodes that are VALID, MEANINGFUL and SELF-CONTAINED.
+class SentenceIndex:
+    def __init__(self, sents: list[TranscriptEntry]):
+        self.sents = sents
+        self.texts = [s.text for s in sents]
+        self.encoder = Embedder(self.texts or ["empty"])
+        self.vecs = self.encoder.encode(self.texts) if sents else np.zeros((0, 1), dtype=np.float32)
+        self.starts = np.array([s.start for s in sents]) if sents else np.zeros(0)
 
-Rules:
-- Never write meta phrases like "the speaker mentions", "this section talks about", "quantum bits mentioned".
-- Concept labels use the pattern "Term: short meaning" when a term is defined
-  (e.g. "Qubits: fundamental unit of quantum computing"), otherwise a crisp claim.
-- Keep labels short (max {label_words} words). Details add facts, examples, numbers or causes.
-- Only use information present in the transcript. Fix obvious caption errors.
-- `start` must be a number of seconds taken from the [mm:ss] markers where the idea is discussed.
-- tone: zero or more of enthusiastic, critical, controversial, cautionary, humorous, instructional,
-  inspirational, analytical, skeptical, optimistic."""
-
-SECTION_SCHEMA = """{
-  "title": "2-6 word section header",
-  "summary": "one sentence overview of the section",
-  "tone": ["..."],
-  "concepts": [
-    {"label": "Term: meaning", "start": 123, "detail": "1-2 sentence explanation",
-     "children": [{"label": "supporting point", "start": 130}]}
-  ]
-}"""
+    def span(self, start: float, end: float) -> np.ndarray:
+        """Indices of sentences starting inside [start, end] (half-second tolerance)."""
+        return np.nonzero((self.starts >= start - 0.5) & (self.starts < end + 0.5))[0]
 
 
-def _llm_section(video_title: str, seg: Segment, concepts, sents: list[TranscriptEntry], cfg: ModeConfig, profile: str, n_sections: int) -> dict | None:
-    excerpt = _compress_excerpt(sents, concepts, cfg.excerpt_chars)
-    label_words = 7 if profile == "visual" else 12
-    prompt = {
-        "video_title": video_title,
-        "section": f"{seg.id[1:]} of {n_sections}",
-        "time_range": f"{fmt_time(seg.start)}-{fmt_time(seg.end)}",
-        "chapter_title": seg.title if seg.from_chapter else None,
-        "keywords_tfidf": seg.keywords,
-        "candidate_concepts": [{"concept": c.label, "first_mention": fmt_time(c.first_ts)} for c in concepts],
-        "want": {
-            "concepts": cfg.concepts,
-            "children_per_concept": cfg.details,
-            "style": "short visual labels" if profile == "visual" else "informative text-rich labels",
-        },
-    }
-    user = (
-        f"Section metadata:\n{llm.compact(prompt)}\n\nTranscript excerpt:\n{excerpt}\n\n"
-        f"Return JSON exactly in this shape:\n{SECTION_SCHEMA}"
-    )
-    data = llm.chat_json(SECTION_SYSTEM.format(label_words=label_words), user, max_tokens=1600)
-    if not isinstance(data, dict) or not isinstance(data.get("concepts"), list):
-        return None
-    return data
+class _Grounder:
+    """Picks real transcript sentences for nodes. Queries are encoded in one batch per section."""
+
+    def __init__(self, sents: list[TranscriptEntry], vecs: np.ndarray, encoder: Embedder):
+        self.sents, self.vecs, self.encoder = sents, vecs, encoder
+        self.texts = [s.text for s in sents]
+
+    def sims(self, queries: list[str]) -> np.ndarray:
+        if not self.sents or not queries:
+            return np.zeros((len(queries), len(self.sents)))
+        return cosine_matrix(self.encoder.encode(queries), self.vecs)
+
+    def locate(self, sims: np.ndarray, hint: float | None, seg: Segment, taken: set[int] = frozenset()) -> int:
+        """Most similar sentence not already used by a sibling, pulled towards `hint` seconds when given."""
+        score = np.array(sims, dtype=float)
+        if isinstance(hint, (int, float)) and seg.start - 5 <= hint <= seg.end + 5:
+            dist = np.array([abs(s.start - hint) for s in self.sents])
+            score = score - dist / max(seg.end - seg.start, 1.0) * 0.5
+        if len(taken) < len(score):
+            score[list(taken)] = -np.inf
+        return int(np.argmax(score))
+
+    def best(self, sims: np.ndarray, k: int, exclude: set[int]) -> list[int]:
+        order = [int(i) for i in np.argsort(-sims) if int(i) not in exclude and len(self.texts[int(i)]) > 25]
+        return order[:k]
 
 
-ROOT_SYSTEM = """You write the central idea of a mind map for a video and link related concepts across sections.
-The central idea is 1-5 words (like a poster title). Links connect concepts from DIFFERENT sections
-with a short verb phrase label (max 4 words)."""
+def _language_hint(request: dict, transcript: Transcript) -> str | None:
+    """Caption-track language from YouTube, when the transcript came with one."""
+    if transcript.source == "extension":
+        return (request.get("languages") or [None])[0]
+    if transcript.source == "youtube-captions":
+        return transcript.language
+    return None  # speech-to-text: let the text decide
 
 
-def _llm_root(title: str, sections: list[dict]) -> dict | None:
-    outline = [
-        {"section": s["text"], "concepts": [c["text"] for c in s["children"] if c["type"] == "concept"]}
-        for s in sections
-    ]
-    user = (
-        f"Video title: {title}\nOutline:\n{llm.compact(outline)}\n\n"
-        'Return JSON: {"central_idea": "...", "overview": "2 sentence overview", "tone": ["..."], '
-        '"links": [{"from": "exact concept text", "to": "exact concept text", "label": "..."}]} '
-        "with at most 6 links."
-    )
-    data = llm.chat_json(ROOT_SYSTEM, user, max_tokens=900)
-    return data if isinstance(data, dict) else None
+def _assemble_section(seg: Segment, concepts, index: SentenceIndex, cfg: ModeConfig, clock: dict, used_terms: set[str]) -> dict:
+    idx = index.span(seg.start, seg.end)
+    if len(idx):
+        grounding = _Grounder([index.sents[i] for i in idx], index.vecs[idx], index.encoder)
+    else:  # tiny segments without sentence starts: fall back to its blocks
+        grounding = _Grounder(seg.blocks, index.encoder.encode([b.text for b in seg.blocks]), index.encoder)
+    sents = grounding.sents
 
-
-def _compress_excerpt(sents: list[TranscriptEntry], concepts, budget: int) -> str:
-    """Extractive compression: keep concept-bearing sentences (in time order) within a char budget."""
-    lines = [(s, f"[{fmt_time(s.start)}] {s.text}") for s in sents]
-    total = sum(len(line) + 1 for _, line in lines)
-    if total <= budget:
-        return "\n".join(line for _, line in lines)
-    aliases = [a for c in concepts for a in c.aliases[:3]]
-    scored = []
-    for idx, (s, line) in enumerate(lines):
-        low = s.text.lower()
-        score = sum(2 for a in aliases if a in low) + min(len(s.text), 200) / 200
-        scored.append((score, idx))
-    keep, used = set(), 0
-    for score, idx in sorted(scored, reverse=True):
-        size = len(lines[idx][1]) + 1
-        if used + size > budget:
-            continue
-        keep.add(idx)
-        used += size
-    return "\n".join(lines[i][1] for i in sorted(keep))
-
-
-# ---------------------------------------------------------------------------
-# Assembly + grounding
-# ---------------------------------------------------------------------------
-def _assemble_section(seg: Segment, concepts, sents: list[TranscriptEntry], result: dict | None, cfg: ModeConfig, profile: str) -> dict:
-    lexicon_tone = detect_tone(seg.text)
     if seg.from_chapter:
         title = seg.title
-    elif result and result.get("title"):
-        title = result["title"]
-    else:  # offline: name the section after the concepts that are most specific to it
+    else:  # name the section after the concepts that are most specific to it
         specific = sorted(concepts, key=lambda c: (len(c.segments), -c.score))
         picks = [c.label for c in specific if " " in c.label][:1]
         taken = {w.lower().removesuffix("'s") for p in picks for w in p.split()}
         picks += [c.label for c in specific if " " not in c.label and c.label.lower().removesuffix("'s") not in taken][:1]
         title = " & ".join(picks) if picks else seg.title
+
+    # summary retriever: the 1–3 most representative sentences of the section (no LLM)
+    tick = time.perf_counter()
+    ranked = summary_points(grounding, SUMMARY_POINTS)
+    clock["summary"] += (time.perf_counter() - tick) * 1000
+    central = ranked[0].text if ranked else ""
+    gist = central if len(ranked) < 2 or len(central) > 140 else f"{central} {ranked[1].text}"
     section = make_node(
         truncate(str(title), 60),
         "section",
         1,
         seg.start,
         seg.end,
-        summary=truncate(str((result or {}).get("summary") or _central_sentence(sents)), 260),
-        tone=merge_tone(lexicon_tone, (result or {}).get("tone")),
+        summary=truncate(gist, 240),
+        source=truncate(central, 300),
+        tone=merge_tone(detect_tone(seg.text), None),
         keywords=seg.keywords,
         segmentId=seg.id,
         theme=seg.theme,
+        points=[{"start": round(p.start, 2), "end": round(p.end, 2), "text": truncate(p.text, 200)} for p in sorted(ranked, key=lambda p: p.start)],
     )
+    section["_ranked"] = ranked  # read (and removed) by the Quick recall branch
+    if seg.from_chapter:
+        section["chapter"] = True  # creator's title: never relabelled
 
-    grounding = _Grounder(sents)
-    raw_concepts = (result or {}).get("concepts") or _heuristic_concepts(concepts, sents, cfg)
+    raw_concepts = _heuristic_concepts(concepts, sents, cfg, used_terms)
+    sims = grounding.sims([rc["term"] + " " + rc["detail"] for rc in raw_concepts])
     used_leaves: set[int] = set()
-    for rc in raw_concepts[: cfg.concepts]:
-        if not isinstance(rc, dict) or not str(rc.get("label", "")).strip():
-            continue
-        label = truncate(str(rc["label"]).strip(), 110)
-        detail = str(rc.get("detail") or "").strip()
-        start = grounding.locate(label + " " + detail, rc.get("start"), seg)
-        node = make_node(label, "concept", 2, start, None, summary=truncate(detail, 320))
-        for child in (rc.get("children") or [])[: cfg.details]:
-            text = child.get("label") if isinstance(child, dict) else child
-            if not text:
-                continue
-            c_start = grounding.locate(str(text), child.get("start") if isinstance(child, dict) else None, seg)
-            node["children"].append(make_node(truncate(str(text), 120), "detail", 3, c_start, None))
-        for idx in grounding.best_sentences(label + " " + detail, k=cfg.leaves, exclude=used_leaves):
-            used_leaves.add(idx)
-            s = sents[idx]
-            node["children"].append(make_node(f"“{truncate(s.text, 150)}”", "transcript", 4, s.start, s.end))
-        node["collapsed"] = profile == "visual" or cfg.leaves == 1
+    anchors: set[int] = set()
+    for i, rc in enumerate(raw_concepts):
+        at = grounding.locate(sims[i], rc["start"], seg, anchors)
+        anchors.add(at)
+        s = sents[at]
+        node = make_node(truncate(rc["label"], 110), "concept", 2, s.start, s.end, summary=truncate(rc["detail"], 320), source=truncate(s.text, 300))
+        for tag, child in rc["children"][: cfg.details]:
+            text = compress(child.text, cfg.detail_words)
+            extra = {"tag": tag} if tag else {}  # Detailed maps also list untagged supporting lines
+            # Short / Standard: each item can grow lazily ("+"); Detailed: already complete, nothing to add
+            node["children"].append(make_node(f"{tag}: {text}" if tag else text, "detail", 3, child.start, child.end, source=truncate(child.text, 300), more=not cfg.expanded, **extra))
+        for j in grounding.best(sims[i], k=cfg.leaves, exclude=used_leaves):
+            used_leaves.add(j)
+            leaf = sents[j]
+            node["children"].append(make_node(f"“{truncate(leaf.text, 150)}”", "transcript", 4, leaf.start, leaf.end, source=truncate(leaf.text, 300)))
+        node["collapsed"] = not cfg.expanded and any(c["type"] == "detail" for c in node["children"])
         section["children"].append(node)
 
     section["children"].sort(key=lambda n: n["start"] if n["start"] is not None else 1e9)
     return section
 
 
-class _Grounder:
-    """Snaps LLM timestamps to real transcript sentences using semantic similarity."""
-
-    def __init__(self, sents: list[TranscriptEntry]):
-        self.sents = sents
-        self.texts = [s.text for s in sents]
-        self.encoder = Embedder(self.texts) if sents else None
-        self.vecs = self.encoder.encode(self.texts) if sents else np.zeros((0, 1))
-
-    def _sims(self, query: str) -> np.ndarray:
-        if not self.sents:
-            return np.zeros(0)
-        return cosine_matrix(self.encoder.encode([query]), self.vecs)[0]
-
-    def locate(self, query: str, llm_start, seg: Segment) -> float:
-        sims = self._sims(query)
-        if not len(sims):
-            return seg.start
-        if isinstance(llm_start, (int, float)) and seg.start - 5 <= llm_start <= seg.end + 5:
-            # prefer sentences near the LLM's timestamp, weighted by similarity
-            dist = np.array([abs(s.start - llm_start) for s in self.sents])
-            score = sims - dist / max(seg.end - seg.start, 1.0) * 0.5
-            return float(self.sents[int(np.argmax(score))].start)
-        return float(self.sents[int(np.argmax(sims))].start)
-
-    def best_sentences(self, query: str, k: int, exclude: set[int]) -> list[int]:
-        sims = self._sims(query)
-        order = [int(i) for i in np.argsort(-sims) if int(i) not in exclude and len(self.texts[int(i)]) > 25]
-        return order[:k]
+def summary_points(grounding: _Grounder, k: int) -> list[TranscriptEntry]:
+    """
+    Extractive summary retriever: the k sentences closest to the section's centroid (the
+    LSA/BERT vectors are already computed), diversified with MMR. Ranked best first.
+    """
+    if not grounding.sents:
+        return []
+    keep = [i for i, t in enumerate(grounding.texts) if 6 <= len(t.split()) <= 45] or list(range(len(grounding.texts)))
+    vecs = grounding.vecs[keep]
+    rel = cosine_matrix(vecs.mean(axis=0, keepdims=True), vecs)[0].astype(float)
+    chosen: list[int] = []
+    seen: set[str] = set()
+    while len(chosen) < k:
+        score = rel.copy() if not chosen else 0.7 * rel - 0.3 * cosine_matrix(vecs, vecs[chosen]).max(axis=1)
+        score[chosen] = -np.inf
+        best = int(np.argmax(score))
+        if not np.isfinite(score[best]):
+            break
+        rel[best] = -np.inf  # never picked twice
+        norm = _norm(grounding.texts[keep[best]])
+        if norm in seen:  # a caption line repeated later in the video
+            continue
+        seen.add(norm)
+        chosen.append(best)
+    return [grounding.sents[keep[i]] for i in chosen]
 
 
-def _central_sentence(sents: list[TranscriptEntry]) -> str:
-    if not sents:
-        return ""
-    texts = [s.text for s in sents if len(s.text) > 30] or [s.text for s in sents]
-    vecs = embed(texts, corpus=texts)
-    centroid = vecs.mean(axis=0, keepdims=True)
-    return texts[int(np.argmax(cosine_matrix(centroid, vecs)[0]))]
+# ---------------------------------------------------------------------------
+# Heuristic (English) labels: "Term: meaning" concepts and tagged level-3 items.
+# The LLM rewrites them later; when it cannot, these are what the student reads.
+# ---------------------------------------------------------------------------
+COPULA_RE = re.compile(r"^(?:is|are|was|were|means|mean|refers to|refer to|is called|are called|is defined as|are defined as|stands for|describes)\s+", re.I)
+LEAD_RE = re.compile(r"^(?:so|and|but|now|okay|ok|well|basically|actually|right|also|then|because)\b[,\s]+", re.I)
+ARTICLE_RE = re.compile(r"^(?:a|an|the)\s+", re.I)
+CLAUSE_RE = re.compile(r",|;|\s(?:which|because|so that|whereas|while|although)\s|\s[-–—]\s")
+TAG_RULES = [
+    ("Formula", re.compile(r"[=≈∝√∑]|\b(?:equals?|formula|equation|squared|cubed|divided by|multiplied by|proportional to|per cent|percent)\b|\d\s*[x×*/^+−-]\s*\d", re.I)),
+    ("Eg", re.compile(r"\b(?:for example|for instance|e\.g\.|such as|imagine|let's say|say you|consider|like when|an example)\b", re.I)),
+    ("Watch-out", re.compile(r"\b(?:careful|caution|mistakes?|wrong|avoid|never|don't|do not|cannot|can't|problems?|pitfalls?|unless|fragile|danger\w*|risk\w*|warning|tricky|confus\w+|limitations?|however|destroys?)\b", re.I)),
+    ("Tip", re.compile(r"\b(?:remember|tip|trick|key|important|note that|always|make sure|rule of thumb|best way|should)\b", re.I)),
+    ("Def", re.compile(r"\b(?:is a|is an|is the|are the|means|refers to|defined as|is called|are called|known as|stands for)\b", re.I)),
+]
 
 
-def _heuristic_concepts(concepts, sents: list[TranscriptEntry], cfg: ModeConfig) -> list[dict]:
-    """Offline fallback: concept label + the most relevant sentence as detail."""
+def _norm(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def compress(text: str, max_words: int) -> str:
+    """Short revision line from a spoken sentence: no discourse markers, cut at a clause when possible."""
+    text = re.sub(r"\s+", " ", text or "").strip().strip("“”\"")
+    while (m := LEAD_RE.match(text)) and m.end() < len(text):
+        text = text[m.end():]
+    text = text.rstrip(" .;,")
+    if len(text.split()) > max_words:
+        heads = [text[: m.start()].strip().rstrip(",;:") for m in CLAUSE_RE.finditer(text)]
+        fits = [h for h in heads if 4 <= len(h.split()) <= max_words]
+        if fits:
+            text = fits[-1]
+        else:
+            text = " ".join(text.split()[:max_words]).rstrip(",;:") + "…"
+    return text[:1].upper() + text[1:]
+
+
+def classify(text: str) -> str | None:
+    for tag, rule in TAG_RULES:
+        if rule.search(text):
+            return tag
+    return None
+
+
+def _lower_first(text: str) -> str:
+    return text if text[:2].isupper() else text[:1].lower() + text[1:]
+
+
+def _meaning(aliases: list[str], mentions: list[TranscriptEntry]) -> tuple[str, TranscriptEntry | None]:
+    """'Superposition means a qubit can be 0 and 1 …' → ('a qubit can be 0 and 1', that sentence)."""
+    for s in mentions:
+        low = s.text.lower()
+        for alias in aliases:
+            pos = low.find(alias)
+            if pos < 0:
+                continue
+            rest = re.sub(r"^(?:'s|s)\b\s*", "", s.text[pos + len(alias):].lstrip(" ,"))
+            if COPULA_RE.match(rest):
+                rest = ARTICLE_RE.sub("", COPULA_RE.sub("", rest, count=1), count=1)
+            elif not (rest.split() and rest.split()[0].lower().strip(",.") in VERB_FORMS):
+                continue
+            meaning = compress(rest, 10)
+            if len(meaning.split()) >= 3:
+                return _lower_first(meaning), s
+    if mentions:  # no definitional sentence: the first mention, shortened
+        return _lower_first(compress(mentions[0].text, 10)), mentions[0]
+    return "", None
+
+
+def _heuristic_concepts(concepts, sents: list[TranscriptEntry], cfg: ModeConfig, used_terms: set[str]) -> list[dict]:
+    """'Term: one-line meaning' + tagged level-3 items, from the sentences that mention the concept."""
+    fresh = [c for c in concepts if c.label.lower() not in used_terms]  # avoid repeating a term in later sections
+    picks = (fresh + [c for c in concepts if c.label.lower() in used_terms])[: cfg.concepts]
     out = []
-    for c in concepts[: cfg.concepts]:
-        mentions = [s for s in sents if any(a in s.text.lower() for a in c.aliases[:3])]
-        detail = truncate(mentions[0].text, cfg.detail_words * 7) if mentions else ""
-        children = [{"label": truncate(m.text, 110), "start": m.start} for m in mentions[1 : 1 + cfg.details]]
-        out.append({"label": c.label, "start": c.first_ts, "detail": detail, "children": children})
+    for c in picks:
+        used_terms.add(c.label.lower())
+        aliases = [a for a in c.aliases[:3] if a]
+        mentions, seen = [], set()
+        for s in sents:
+            if any(a in s.text.lower() for a in aliases) and _norm(s.text) not in seen:
+                seen.add(_norm(s.text))
+                mentions.append(s)
+        meaning, anchor = _meaning(aliases, mentions)
+        tagged = [(tag, s) for s in mentions if s is not anchor and (tag := classify(s.text))]
+        first_per_tag: dict[str, tuple[str, TranscriptEntry]] = {}
+        for item in tagged:
+            first_per_tag.setdefault(item[0], item)
+        ordered = list(first_per_tag.values()) + [item for item in tagged if item not in first_per_tag.values()]
+        if not ordered and mentions:  # nothing tagged: one plain definition line, preferably not the label's own sentence
+            ordered = [("Def", next((s for s in mentions if s is not anchor), anchor or mentions[0]))]
+        if cfg.expanded:  # Detailed: fill up with the other sentences that mention the concept (untagged)
+            used = {id(s) for _, s in ordered} | {id(anchor)}
+            ordered += [(None, s) for s in mentions if id(s) not in used]
+        out.append({
+            "label": f"{c.label}: {meaning}" if meaning else c.label,
+            "term": c.label,
+            "start": c.first_ts,
+            "detail": anchor.text if anchor else "",
+            "children": sorted(ordered[: cfg.details], key=lambda item: TAGS.index(item[0]) if item[0] else len(TAGS)),
+        })
     return out
+
+
+def _recall_branch(sections: list[dict], duration: float) -> dict | None:
+    """'Quick recall': a one-line summary + 3–6 must-remember points (the sections' best summary sentences)."""
+    ranked = [sec.pop("_ranked", []) for sec in sections]
+    want = min(6, max(3, len(sections)))
+    picks: list[TranscriptEntry] = []
+    seen: set[str] = set()
+    for depth in range(SUMMARY_POINTS):
+        for points in ranked:
+            if len(picks) < want and depth < len(points) and _norm(points[depth].text) not in seen:
+                seen.add(_norm(points[depth].text))
+                picks.append(points[depth])
+    if not picks:
+        return None
+    picks.sort(key=lambda p: p.start)
+    one_line = _one_line(sections)
+    first = truncate(picks[0].text, 300)
+    node = make_node("Quick recall", "section", 1, 0, duration, summary=one_line, source=first, recall=True, color=len(sections) % 5)
+    node["children"].append(make_node(f"In one line: {one_line}", "concept", 2, 0, duration, source=first, recall=True, oneline=True))
+    for p in picks:
+        node["children"].append(make_node(compress(p.text, 14), "concept", 2, p.start, p.end, source=truncate(p.text, 300), recall=True))
+    return node
+
+
+def _one_line(sections: list[dict]) -> str:
+    names = [" ".join(w if w.isupper() else w.lower() for w in s["text"].split()) for s in sections[:5]]
+    return compress("Covers " + ", ".join(names), 20) if names else ""
 
 
 def _heuristic_overview(sections: list[dict]) -> str:
@@ -387,14 +517,54 @@ def _heuristic_overview(sections: list[dict]) -> str:
 
 def _short_title(title: str) -> str:
     # "How Quantum Computers Work | Full Lecture (2024)" -> "How Quantum Computers Work"
-    import re
-
     core = re.split(r"\s[|\-–—:]\s|\(|\[", title)[0].strip()
     return smart_title(truncate(core or title, 48))
 
 
-def _cross_edges(root: dict, graph: ConceptGraph, llm_links: list[dict]) -> list[dict]:
-    concept_nodes = [(sec, c) for sec in root["children"] for c in sec["children"] if c["type"] == "concept"]
+def _walk(node: dict):
+    yield node
+    for child in node.get("children", []):
+        yield from _walk(child)
+
+
+# ---------------------------------------------------------------------------
+# Faithfulness: how well a node's text matches its own transcript span
+# ---------------------------------------------------------------------------
+FAITH_TYPES = {"section", "concept", "detail"}
+
+
+def _latin(text: str) -> bool:
+    letters = [ch for ch in text if ch.isalpha()]
+    return bool(letters) and sum(ch.isascii() for ch in letters) / len(letters) > 0.6
+
+
+def score_faithfulness(nodes: list[dict], encoder: Embedder, spans: dict[str, str] | None = None) -> None:
+    """
+    Set `faith` (0..1 cosine) = similarity between a node's text and its own transcript span
+    (`spans[id]` when given, else the node's `source` sentence). Skipped for non-Latin
+    transcripts, where an English label cannot be compared with the spoken words.
+    """
+    spans = spans or {}
+    items = [(n, spans.get(n["id"]) or n.get("source") or "") for n in nodes if n.get("type") in FAITH_TYPES]
+    items = [(n, span) for n, span in items if span and _latin(span)]
+    if not items:
+        return
+    texts = encoder.encode([n["text"] for n, _ in items])
+    vecs = encoder.encode([span for _, span in items])
+    for (node, _), a, b in zip(items, texts, vecs):
+        node["faith"] = round(max(0.0, float(a @ b)), 2)
+
+
+# ---------------------------------------------------------------------------
+# Cross links: knowledge-graph edges + embedding similarity across sections
+# ---------------------------------------------------------------------------
+MAX_EDGES = 10
+MAX_SIMILAR_EDGES = 4
+SIMILAR_THRESHOLD = 0.55
+
+
+def _cross_edges(root: dict, graph: ConceptGraph, index: SentenceIndex) -> list[dict]:
+    concept_nodes = [(sec, c) for sec in root["children"] if not sec.get("recall") for c in sec["children"] if c["type"] == "concept"]
     if not concept_nodes:
         return []
     edges: list[dict] = []
@@ -407,18 +577,11 @@ def _cross_edges(root: dict, graph: ConceptGraph, llm_links: list[dict]) -> list
         seen.add(key)
         edges.append({"id": new_id("e"), "source": a["id"], "target": b["id"], "label": truncate(label, 32), "origin": source})
 
-    by_text = {c["text"].lower(): (sec, c) for sec, c in concept_nodes}
-    for link in llm_links[:6]:
-        if not isinstance(link, dict):
-            continue
-        a = by_text.get(str(link.get("from", "")).lower())
-        b = by_text.get(str(link.get("to", "")).lower())
-        if a and b and a[0]["id"] != b[0]["id"]:
-            add(a[1], b[1], str(link.get("label") or "related to"), "llm")
-
     # knowledge-graph edges mapped onto nodes whose text mentions the concept
+    by_concept = {c.id: c for c in graph.concepts}
+
     def node_for(concept_id: str):
-        concept = next((c for c in graph.concepts if c.id == concept_id), None)
+        concept = by_concept.get(concept_id)
         if not concept:
             return None
         for sec, node in concept_nodes:
@@ -428,9 +591,26 @@ def _cross_edges(root: dict, graph: ConceptGraph, llm_links: list[dict]) -> list
         return None
 
     for e in graph.edges:
-        if len(edges) >= 10:
+        if len(edges) >= MAX_EDGES - MAX_SIMILAR_EDGES:
             break
         a, b = node_for(e["source"]), node_for(e["target"])
         if a and b and a[0]["id"] != b[0]["id"]:
             add(a[1], b[1], e["label"], "graph")
+
+    # semantically close concepts that live in different sections
+    vecs = index.encoder.encode([f"{c['text']}. {c['summary']}" for _, c in concept_nodes])
+    sims = cosine_matrix(vecs)
+    pairs = [
+        (float(sims[i, j]), i, j)
+        for i in range(len(concept_nodes))
+        for j in range(i + 1, len(concept_nodes))
+        if concept_nodes[i][0]["id"] != concept_nodes[j][0]["id"] and sims[i, j] >= SIMILAR_THRESHOLD
+    ]
+    added = 0
+    for _, i, j in sorted(pairs, reverse=True):
+        if len(edges) >= MAX_EDGES or added >= MAX_SIMILAR_EDGES:
+            break
+        before = len(edges)
+        add(concept_nodes[i][1], concept_nodes[j][1], "related to", "similar")
+        added += len(edges) - before
     return edges

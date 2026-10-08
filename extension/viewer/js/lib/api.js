@@ -52,17 +52,61 @@ export class Api {
     return !!this.health?.ok;
   }
 
-  /** Start the pipeline and poll until done. `onProgress({stage, progress, log})`. */
-  async generate(payload, onProgress, { interval = 1200, signal } = {}) {
-    const { jobId } = await this.request('/api/jobs', { method: 'POST', body: payload });
+  /**
+   * Skeleton-first generation. POST /api/jobs returns the complete map (built from the
+   * transcript, no AI) in the same response, plus a jobId when the single AI label call
+   * is still running. `{ map, jobId, pending, cached }`
+   */
+  startJob(payload) {
+    return this.request('/api/jobs', { method: 'POST', body: payload, timeout: 60000 });
+  }
+
+  /**
+   * Long-poll a job: each request returns as soon as the skeleton (hasMap=false) or the
+   * label ops (hasMap=true) are ready, so there is no fixed polling interval.
+   * Resolves with the job once `status` is done; `onProgress(job)` sees interim states.
+   */
+  async waitJob(jobId, { hasMap = false, onProgress, signal } = {}) {
     for (;;) {
       if (signal?.aborted) throw new BackendError('Cancelled');
-      const job = await this.request(`/api/jobs/${jobId}`, { timeout: 15000 });
+      const job = await this.request(`/api/jobs/${jobId}?wait=20&hasMap=${hasMap ? 1 : 0}`, { timeout: 30000 });
       onProgress?.(job);
-      if (job.status === 'done') return job.result;
       if (job.status === 'error') throw new BackendError(job.error || 'Pipeline failed');
-      await new Promise((r) => setTimeout(r, interval));
+      if (job.status === 'done' || (!hasMap && job.map)) return job;
     }
+  }
+
+  /**
+   * Node chatbot. Streams NDJSON events: {type:'sources'|'delta'|'done'}.
+   * `onEvent(event)` is called for each one; resolves when the stream ends.
+   */
+  async chat(map, nodeId, question, history, onEvent, { signal } = {}) {
+    let res;
+    try {
+      res = await fetch(`${this.base}/api/chat`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ map: slim(map), nodeId, question, history }),
+        signal,
+      });
+    } catch (err) {
+      throw new BackendError(`Backend unreachable (${err.message})`);
+    }
+    if (!res.ok || !res.body) throw new BackendError(`HTTP ${res.status}`);
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buffer = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += value;
+      let nl;
+      while ((nl = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        if (line) onEvent(JSON.parse(line));
+      }
+    }
+    if (buffer.trim()) onEvent(JSON.parse(buffer));
   }
 
   refine(map, action, nodeIds, instruction = '') {

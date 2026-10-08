@@ -1,18 +1,19 @@
 /**
  * Node inspector (right-hand panel): edit text & summary, notes, external links,
  * images (storyboard / captured frame / upload), tone tags, timestamps,
- * cross-links and AI refinement for the selected node(s).
+ * cross-links, AI refinement and the "Ask" chat for the selected node(s).
+ * (The video's own words are on YouTube: there is no transcript block here.)
  */
 import { captureCurrentFrame, currentVideoTime, pickImageFile, storyboardFrame } from './frames.js';
 import { REFINE_ACTIONS, runRefine } from './refine.js';
 import { el, fmtTime, isHttpUrl, plain, toast } from './shared.js';
 
 const TONES = ['enthusiastic', 'critical', 'controversial', 'cautionary', 'humorous', 'instructional', 'inspirational', 'analytical', 'skeptical', 'optimistic'];
-const TYPE_LABEL = { root: 'Central idea', section: 'Section · overview layer', concept: 'Concept · cluster layer', detail: 'Detail', transcript: 'Transcript leaf' };
+const TYPE_LABEL = { root: 'Topic', section: 'Section', concept: 'Key concept', detail: 'Detail', transcript: 'Quote' };
 
 export class InspectorPanel {
-  constructor({ host, model, renderer, api, seek, gamify, profile }) {
-    Object.assign(this, { host, model, renderer, api, seek, gamify, profile });
+  constructor({ host, model, renderer, api, seek, gamify, ask }) {
+    Object.assign(this, { host, model, renderer, api, seek, gamify, ask });
     this.ids = [];
     renderer.addEventListener('select', (e) => this.show(e.detail.ids));
     model.addEventListener('change', (e) => {
@@ -40,7 +41,6 @@ export class InspectorPanel {
   }
 
   close() {
-    if (this.openedAt && performance.now() - this.openedAt > 6000) this.profile?.track('panel-read');
     this.renderer.select([]);
   }
 
@@ -55,7 +55,7 @@ export class InspectorPanel {
 
     frag.append(
       el('div', { class: 'panel-head' }, [
-        el('span', { class: 'panel-type' }, TYPE_LABEL[node.type] || node.type),
+        el('span', { class: 'panel-type' }, node.recall ? 'Quick recall' : node.tag ? `${node.tag} · detail` : TYPE_LABEL[node.type] || node.type),
         el('button', { class: 'icon-btn', title: 'Close (Esc)', onclick: () => this.close() }, '✕'),
       ]),
     );
@@ -71,14 +71,14 @@ export class InspectorPanel {
     const summary = el('textarea', { class: 'panel-summary', rows: 3, placeholder: 'Summary / explanation…' });
     summary.value = node.summary || '';
     summary.addEventListener('change', () => this.#commit(node.id, { summary: summary.value.trim() }));
-    summary.addEventListener('focus', () => this.profile?.track('summary-read'));
     frag.append(summary);
 
     // --- timestamp ------------------------------------------------------------
-    const tsRow = el('div', { class: 'panel-row' });
+    const tsRow = el('div', { class: 'panel-row wrap' });
     if (node.start !== null && node.start !== undefined) {
-      tsRow.append(el('button', { class: 'btn btn-accent', onclick: () => this.seek(node) }, `▶ Watch at ${fmtTime(node.start)}`));
+      tsRow.append(el('button', { class: 'btn btn-accent', onclick: () => this.seek(node) }, `Watch at ${fmtTime(node.start)}`));
     }
+    if (this.ask && this.ids.length === 1) tsRow.append(el('button', { class: 'btn', title: 'Ask a question about this node (a)', onclick: () => this.ask(node.id) }, '💬 Ask'));
     if (videoId) {
       tsRow.append(
         el('button', {
@@ -93,6 +93,7 @@ export class InspectorPanel {
       );
     }
     if (tsRow.children.length) frag.append(tsRow);
+
     if (node.videoId && node.videoId !== meta.videoId) frag.append(el('p', { class: 'panel-note' }, '🔗 From another video in the Knowledge Hub.'));
 
     // --- tone -------------------------------------------------------------------
@@ -116,7 +117,7 @@ export class InspectorPanel {
     const imgBox = el('div', { class: 'panel-image' });
     if (node.image?.src) {
       imgBox.append(
-        el('img', { src: node.image.src, alt: 'Frame from the video', onclick: () => this.profile?.track('image-open') }),
+        el('img', { src: node.image.src, alt: 'Frame from the video' }),
         el('small', {}, `${node.image.source || 'image'}${node.image.t ? ` @ ${fmtTime(node.image.t)}` : ''}`),
       );
     }
@@ -129,7 +130,6 @@ export class InspectorPanel {
             try {
               const src = await storyboardFrame(meta.storyboardSpec, meta.duration, node.start + 2);
               this.#commit(node.id, { image: { src, t: node.start + 2, source: 'storyboard' } });
-              this.profile?.track('frame-added');
             } catch (err) {
               toast(err.message, { type: 'error' });
             }
@@ -145,7 +145,6 @@ export class InspectorPanel {
           onclick: async () => {
             try {
               this.#commit(node.id, { image: await captureCurrentFrame(videoId) });
-              this.profile?.track('frame-added');
             } catch (err) {
               toast(err.message, { type: 'error' });
             }
@@ -177,10 +176,7 @@ export class InspectorPanel {
         if (notes.value !== (node.notes || '')) {
           const firstNote = !node.notes;
           this.#commit(node.id, { notes: notes.value });
-          if (firstNote) {
-            this.gamify?.track('note_added');
-            this.profile?.track('notes-written');
-          }
+          if (firstNote) this.gamify?.track('note_added');
         }
       }, 700);
     });
@@ -233,7 +229,7 @@ export class InspectorPanel {
     frag.append(structure);
 
     // --- AI -------------------------------------------------------------------------------------------
-    frag.append(el('h4', {}, `AI refinement ${this.api.online ? `· ${this.api.health?.llm || ''}` : '· offline'}`));
+    frag.append(el('h4', {}, this.api.online ? 'AI refinement' : 'AI refinement · offline'));
     const instruction = el('input', { type: 'text', class: 'panel-instruction', placeholder: 'Optional instruction, e.g. "add real-world examples"' });
     frag.append(instruction);
     frag.append(

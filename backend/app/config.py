@@ -32,6 +32,18 @@ class Settings:
     groq_api_key: str = field(default_factory=lambda: _env("GROQ_API_KEY"))
     groq_model: str = field(default_factory=lambda: _env("GROQ_MODEL", "llama-3.3-70b-versatile"))
     groq_fallback_model: str = field(default_factory=lambda: _env("GROQ_FALLBACK_MODEL", "llama-3.1-8b-instant"))
+    # Fast model for the single map-label call and the node chatbot. Empty = auto-pick the
+    # fastest live model (llama-3.1-8b-instant, else gpt-oss-20b with low reasoning effort).
+    groq_label_model: str = field(default_factory=lambda: _env("GROQ_LABEL_MODEL"))
+    label_timeout: float = field(default_factory=lambda: float(_env("LABEL_TIMEOUT", "1.2")))
+    chat_timeout: float = field(default_factory=lambda: float(_env("CHAT_TIMEOUT", "12.0")))
+
+    # English-only maps: non-English transcripts are translated once per video with NLLB-200
+    # (CTranslate2 int8; run scripts/convert_nllb.py once). English videos never touch the model.
+    nllb_enabled: bool = field(default_factory=lambda: _env("NLLB_ENABLED", "1").lower() not in ("0", "false", "no", "off"))
+    nllb_model_path: Path = field(
+        default_factory=lambda: Path(_env("NLLB_MODEL_PATH") or BACKEND_DIR / "data" / "models" / "nllb-200-distilled-600M-ct2-int8")
+    )
 
     hf_token: str = field(default_factory=lambda: _env("HF_TOKEN"))
     hf_model: str = field(default_factory=lambda: _env("HF_MODEL", "Qwen/Qwen2.5-7B-Instruct"))
@@ -59,7 +71,7 @@ class Settings:
 
 
 settings = Settings()
-for sub in ("", "cache", "media"):
+for sub in ("", "cache", "cache/translated", "media"):
     (settings.data_dir / sub).mkdir(parents=True, exist_ok=True)
 
 

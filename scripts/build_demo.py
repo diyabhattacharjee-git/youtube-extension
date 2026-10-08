@@ -134,7 +134,6 @@ def build() -> dict:
             "channel": "TubeMind sample",
             "duration": duration,
             "mode": "academic",
-            "profile": "balanced",
             "language": "en",
             "transcriptSource": "sample",
             "llm": "hand-written sample",
@@ -160,3 +159,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+ 

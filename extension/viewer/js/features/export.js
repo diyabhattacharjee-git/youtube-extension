@@ -2,14 +2,16 @@
  * Export & "Knowledge export to other tools".
  *   JSON      lossless TubeMind document (re-importable)
  *   PNG / SVG hand-drawn image with embedded fonts
- *   Markdown  nested outline with ▶ timestamp links
+ *   Markdown  revision sketchbook: Quick recall, numbered sections with time ranges,
+ *             "Term: meaning" concepts and Def / Eg / Formula / Tip / Watch-out lines
  *   Obsidian  frontmatter + [[wikilinks]] + callouts + related:: links
  *   Roam      Roam Research JSON import format
  *   Notion    Markdown that Notion imports cleanly, or direct push via backend API
  *   OPML      opens in XMind, MindNode, Logseq, Workflowy, OmniOutliner…
  */
-import { GOOGLE_FONTS_URL } from '../mindmap/themes.js';
+import { FONT_FILES } from '../mindmap/themes.js';
 import { download, fmtTime, plain, slugify, toast } from '../lib/util.js';
+import { timeRange } from './contentmap.js';
 
 const tsUrl = (map, node) => {
   const videoId = node.videoId || map.meta?.videoId;
@@ -38,29 +40,36 @@ export function toMarkdown(map, { flavor = 'markdown' } = {}) {
   }
 
   lines.push(`# ${plain(map.root.text)}`, '');
-  if (meta.url) lines.push(`> 🎬 [${title}](${meta.url})${meta.channel ? ` — ${meta.channel}` : ''}`, '');
-  if (map.root.summary) lines.push(map.root.summary, '');
+  if (meta.url) lines.push(`> Video: [${title}](${meta.url})${meta.channel ? ` — ${meta.channel}` : ''}`, '');
 
   const label = (node) => {
     const text = plain(node.text);
-    if (!obsidian || !['concept', 'section'].includes(node.type)) return text;
+    if (!obsidian || node.recall || !['concept', 'section'].includes(node.type)) return text;
     const term = text.includes(':') ? text.split(':')[0].trim() : text;
     return text.includes(':') ? `[[${term}]]:${text.slice(text.indexOf(':') + 1)}` : `[[${term}]]`;
   };
 
+  const sections = (map.root.children || []).filter((c) => c.type === 'section');
+  const numbered = sections.filter((c) => !c.recall);
+  if (map.root.summary && !sections.some((c) => c.recall)) lines.push(map.root.summary, ''); // maps made before Quick recall
   const writeNode = (node, depth) => {
+    if (node.type === 'transcript') return; // the video's own words stay on YouTube
     const url = tsUrl(map, node);
-    const ts = url ? ` [▶ ${fmtTime(node.start)}](${url})` : '';
-    const tone = node.tone?.length ? ` \`${node.tone.join('` `')}\`` : '';
     if (node.type === 'section') {
-      lines.push(`## ${label(node)}${ts}${tone}`);
-      if (node.summary) lines.push('', `*${node.summary}*`);
+      const n = numbered.indexOf(node) + 1;
+      const range = node.recall ? '' : timeRange(node.start, node.end);
+      lines.push(`## ${n ? `${n}. ` : ''}${label(node)}${range && url ? ` · [${range}](${url})` : ''}`);
+      if (node.summary) lines.push('', node.recall ? `**In one line:** ${node.summary}` : `*${node.summary}*`);
+      const terms = (node.children || []).filter((c) => c.type === 'concept' && !node.recall).map((c) => plain(c.text).split(':')[0].trim());
+      if (terms.length) lines.push('', `Key terms: ${[...new Set(terms)].slice(0, 5).join(' · ')}`);
       lines.push('');
     } else {
+      if (node.oneline) return; // already under the Quick recall heading
+      const ts = url ? ` [${fmtTime(node.start)}](${url})` : '';
       const indent = '  '.repeat(Math.max(0, depth - 2));
-      const text = node.type === 'transcript' ? `*${label(node)}*` : label(node);
-      lines.push(`${indent}- ${text}${ts}`);
-      if (node.summary && node.type !== 'transcript') lines.push(`${indent}  - ${node.summary}`);
+      const text = plain(node.text);
+      const body = node.tag && text.startsWith(`${node.tag}:`) ? `**${node.tag}:** ${text.slice(node.tag.length + 1).trim()}` : label(node);
+      lines.push(`${indent}- ${body}${ts}`);
     }
     const indent = '  '.repeat(Math.max(0, depth - 1));
     if (node.image?.src && !node.image.src.startsWith('data:')) lines.push(`${indent}  ![](${node.image.src})`);
@@ -68,11 +77,12 @@ export function toMarkdown(map, { flavor = 'markdown' } = {}) {
       if (obsidian) lines.push(`${indent}  > [!note] My note`, ...node.notes.split('\n').map((l) => `${indent}  > ${l}`));
       else lines.push(...node.notes.split('\n').map((l) => `${indent}  > ${l}`));
     }
-    for (const link of node.links || []) lines.push(`${indent}  - 🔗 [${link.title || link.url}](${link.url})`);
+    for (const link of node.links || []) lines.push(`${indent}  - Link: [${link.title || link.url}](${link.url})`);
     for (const child of node.children || []) writeNode(child, depth + 1);
     if (node.type === 'section') lines.push('');
   };
-  for (const section of map.root.children || []) writeNode(section, 1);
+  // Quick recall first: what to read when there is no time left
+  for (const section of [...sections.filter((c) => c.recall), ...(map.root.children || []).filter((c) => !c.recall)]) writeNode(section, 1);
 
   if (map.edges?.length) {
     const byId = new Map();
@@ -92,7 +102,7 @@ export function toMarkdown(map, { flavor = 'markdown' } = {}) {
     }
     lines.push('');
   }
-  lines.push('', `<sub>Generated with TubeMind · ${meta.mode || ''} mode · ${meta.llm || ''}</sub>`);
+  lines.push('', '<sub>Generated with TubeMind</sub>');
   return lines.join('\n');
 }
 
@@ -137,28 +147,25 @@ export function toOPML(map) {
 
 // ---------------------------------------------------------------------------
 let fontCssPromise;
-/** Inline Google Fonts as data URLs so the exported SVG/PNG keeps the handwriting. */
+/** Inline the bundled font files as data URLs so exported SVG/PNG keep the same typeface. */
 async function embeddedFontCss() {
   fontCssPromise ??= (async () => {
     try {
-      const css = await (await fetch(GOOGLE_FONTS_URL)).text();
-      const urls = [...new Set([...css.matchAll(/url\((https:[^)]+)\)/g)].map((m) => m[1]))];
-      let out = css;
-      await Promise.all(
-        urls.map(async (url) => {
-          const blob = await (await fetch(url)).blob();
+      const faces = await Promise.all(
+        FONT_FILES.map(async (file) => {
+          const [weight, style] = file.match(/(\d{3})-(normal|italic)/).slice(1);
+          const blob = await (await fetch(chrome.runtime.getURL(file))).blob();
           const dataUrl = await new Promise((resolve) => {
             const reader = new FileReader();
             reader.onload = () => resolve(reader.result);
             reader.readAsDataURL(blob);
           });
-          out = out.split(url).join(dataUrl);
+          return `@font-face{font-family:'Atkinson Hyperlegible';font-style:${style};font-weight:${weight};src:url(${dataUrl}) format('woff2');}`;
         }),
       );
-      // keep only latin subsets to limit size
-      return out.replace(/\/\* (?!latin \*\/)[a-z-]+ \*\/\s*@font-face\s*{[^}]*}/g, '');
+      return faces.join('\n');
     } catch {
-      return ''; // offline: system handwriting fallbacks are used
+      return ''; // system fallback fonts are used
     }
   })();
   return fontCssPromise;
